@@ -1,0 +1,227 @@
+<html>
+<head>
+<meta charset="utf8">
+<title>WebGL 2D to 3D</title>
+<link type="text/css" href="resources/webgl-tutorials.css" rel="stylesheet" />
+</head>
+<body>
+<canvas></canvas>
+<div id="uiContainer">
+  <div id="ui">
+  </div>
+</div>
+</body>
+<!-- this is included only for iframe and requestAnimationFrame support -->
+<!--
+for most samples webgl-utils only provides shader compiling/linking and
+canvas resizing because why clutter the examples with code that's the same in every sample.
+See http://webglfundamentals.org/webgl/lessons/webgl-boilerplate.html
+and http://webglfundamentals.org/webgl/lessons/webgl-resizing-the-canvas.html
+for webgl-utils, m3, m4, and webgl-lessons-ui.
+-->
+<script src="resources/webgl-lessons-ui.js"></script>
+<script src="resources/twgl-full.3.x.min.js"></script>
+<script src="resources/webgl-lessons-helper.js"></script> <!-- you can and should delete this script. it is only used on the site to help with errors -->
+<script src="resources/m4.js"></script>
+<script>
+const vs = `
+uniform mat4 u_worldViewProjection;
+
+attribute vec4 position;
+attribute vec2 texcoord;
+
+varying vec4 v_position;
+varying vec2 v_texcoord;
+
+void main() {
+  v_texcoord = texcoord;
+  gl_Position = u_worldViewProjection * position;
+}
+`;
+const fs = `
+precision mediump float;
+
+varying vec2 v_texcoord;
+
+uniform sampler2D u_texture;
+
+void main() {
+  gl_FragColor = texture2D(u_texture, v_texcoord);
+}
+`;
+
+
+"use strict";
+const m4 = twgl.m4;
+const v3 = twgl.v3;
+const gl = document.querySelector("canvas").getContext("webgl");
+
+// compiles shaders, links program, looks up locations
+const programInfo = twgl.createProgramInfo(gl, [vs, fs]);
+
+// calls gl.createBuffer, gl.bindBuffer, gl.bufferData for positions, texcoords
+const bufferInfo = twgl.primitives.createCubeBufferInfo(gl);
+
+// calls gl.createTexture, gl.bindTexture, gl.texImage2D, gl.texParameteri
+const tex = twgl.createTexture(gl, {
+  min: gl.NEAREST,
+  mag: gl.NEAREST,
+  src: [
+    255, 0, 0, 255,
+    0, 192, 0, 255,
+    0, 0, 255, 255,
+    255, 224, 0, 255,
+  ],
+});
+
+const settings = {
+  projectionMode: 2,
+  cameraMode: 2,
+  fov: 30,
+};
+
+function render(time) {
+  time *= 0.001;
+  twgl.resizeCanvasToDisplaySize(gl.canvas);
+  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  const fov = settings.fov * Math.PI / 180;
+  const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+  const perspZNear = 0.5;
+  const perspZFar = 10;
+  const persp = m4.perspective(fov, aspect, perspZNear, perspZFar);
+
+  // the size to make the orthographic view is arbitrary.
+  // here we're choosing the number of units at ground level
+  // away from the top perspective camera
+  const heightAboveGroundInTopView = 7;
+  const halfSizeToFitOnScreen = heightAboveGroundInTopView * Math.tan(fov / 2);
+
+  const top = -halfSizeToFitOnScreen;
+  const bottom = +halfSizeToFitOnScreen;
+  const left = top * aspect;
+  const right = bottom * aspect;
+  const orthoZNear = 0.5;
+  const orthoZFar = 10;
+  const ortho = m4.ortho(left, right, top, bottom, orthoZNear, orthoZFar);
+
+  let perspMixAmount;
+  let camMixAmount;
+  switch (settings.projectionMode) {
+    case 0: // 2d
+      perspMixAmount = 0;
+      break;
+    case 1: // 3d
+      perspMixAmount = 1;
+      break;
+    case 2: // animated
+      perspMixAmount = Math.sin(time) * .5 + .5;
+      break;
+  }
+
+  switch (settings.cameraMode) {
+    case 0: // top
+      camMixAmount = 0;
+      break;
+    case 1: // angle
+      camMixAmount = 1;
+      break;
+    case 2: // animated
+      camMixAmount = Math.sin(time) * .5 + .5;
+      break;
+  }
+
+  const projection = [];
+  for (let i = 0; i < 16; ++i) {
+    projection[i] = lerp(ortho[i], persp[i], perspMixAmount);
+  }
+
+  const perspEye = [1, 4, -6];
+  const perspTarget = [0, 0, 0];
+  const perspUp = [0, 1, 0];
+
+  const orthoEye = [0, heightAboveGroundInTopView, 0];
+  const orthoTarget = [0, 0, 0];
+  const orthoUp = [0, 0, 1];
+
+  const eye = v3.lerp(orthoEye, perspEye, camMixAmount);
+  const target = v3.lerp(orthoTarget, perspTarget, camMixAmount);
+  const up = v3.lerp(orthoUp, perspUp, camMixAmount);
+
+  const camera = m4.lookAt(eye, target, up);
+  const view = m4.inverse(camera);
+  const viewProjection = m4.multiply(projection, view);
+
+  gl.useProgram(programInfo.program);
+
+  // calls gl.bindBuffer, gl.enableVertexAttribArray, gl.vertexAttribPointer
+  twgl.setBuffersAndAttributes(gl, programInfo, bufferInfo);
+  const t = time * .1;
+  for (let z = -1; z <= 1; ++z) {
+    for (let x = -1; x <= 1; ++x) {
+      const world = m4.translation([x * 1.4, 0, z * 1.4]);
+      m4.rotateY(world, t + z + x, world);
+
+      // calls gl.uniformXXX
+      twgl.setUniforms(programInfo, {
+        u_texture: tex,
+        u_worldViewProjection: m4.multiply(viewProjection, world),
+      });
+
+      // calls gl.drawArrays or gl.drawElements
+      twgl.drawBufferInfo(gl, bufferInfo);
+    }
+  }
+
+  requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+
+//setupRadioButtons("proj", "projectionMode");
+//setupRadioButtons("cam", "cameraMode");
+//setupSlider("#fovSlider", "#fov", "fov");
+webglLessonsUI.setupUI(document.querySelector("#ui"), settings, [
+  { type: "separator", label: "projection", },
+  { type: "radio",  key: "projectionMode", options: ["orthographic", "perspective", "animated"], },
+  { type: "separator", label: "camera", },
+  { type: "radio",  key: "cameraMode", options: ["top", "angle", "animated"],  },
+  { type: "slider", key: "fov", min: 10, max: 90, },
+]);
+
+function setupSlider(sliderId, labelId, property) {
+  const slider = document.querySelector(sliderId);
+  const label = document.querySelector(labelId);
+
+  function updateLabel() {
+    label.textContent = settings[property];
+  }
+
+  slider.addEventListener('input', e => {
+    settings[property] = parseInt(slider.value);
+    updateLabel();
+  });
+
+  updateLabel();
+  slider.value = settings[property];
+}
+
+function setupRadioButtons(name, property) {
+  document.querySelectorAll(`input[name=${name}]`).forEach(elem => {
+    elem.addEventListener('change', e => {
+      if (e.target.checked) {
+        settings[property] = parseInt(e.target.value);
+      }
+    });
+  });
+}
+
+function lerp(a, b, l) {
+  return a + (b - a) * l;
+}
+</script>
+</html>
+

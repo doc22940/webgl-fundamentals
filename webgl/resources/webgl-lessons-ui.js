@@ -177,6 +177,42 @@
     };
   }
 
+  function makeRadio(options) {
+    const outer = document.createElement("div");
+    outer.className = "gman-radio-outer";
+    const radios = options.options.map((name, ndx) => {
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.value = ndx;
+      radio.checked = ndx === options.value;
+      radio.name = options.name;
+      radio.addEventListener('change', e => {
+        if (radio.checked) {
+          options.change(e, {
+            value: ndx,
+          });
+        }
+      });
+      const label = document.createElement("label");
+      label.for = options.name;
+      label.textContent = name;
+      label.className = "gman-widget-label";
+      const div = document.createElement("div");
+      div.appendChild(radio);
+      div.appendChild(label);
+      outer.appendChild(div);
+      return radio;
+    });
+    return {
+      elem: outer,
+      updateValue: function(v) {
+        radios.forEach((radio, ndx) => {
+          radio.checked = ndx === v;
+        });
+      }
+    }
+  }
+
   function noop() {
   }
 
@@ -213,10 +249,32 @@
     return makeOption(ui);
   }
 
+  function genSeparator(object, ui) {
+    const elem = document.createElement("div");
+    elem.textContent = ui.label;
+    elem.className = "gman-widget-label";
+    return {
+      elem: elem,
+    };
+  }
+
+  function genRadio(object, ui) {
+    const changeFn = ui.change || noop;
+    ui.value = object[ui.key];
+    ui.name = ui.name || ui.key,
+    ui.change = function(event, uiInfo) {
+      object[ui.key] = uiInfo.value;
+      changeFn();
+    };
+    return makeRadio(ui);
+  }
+
   const uiFuncs = {
     slider: genSlider,
     checkbox: genCheckbox,
     option: genOption,
+    separator: genSeparator,
+    radio: genRadio,
   };
 
   function setupUI(parent, object, uiInfos) {

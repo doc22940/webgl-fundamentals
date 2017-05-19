@@ -64,6 +64,8 @@ canvas {
 .gman-slider-upper {
   height: 1.5em;
 }
+.gman-radio-outer {
+}
 .gman-slider-outer, .gman-widget-outer {
   float: right;
   display: flex;
