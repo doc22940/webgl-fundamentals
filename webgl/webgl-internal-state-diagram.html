@@ -1,0 +1,53 @@
+<html>
+<head>
+<meta charset="utf8">
+<title>WebGL 3D Lathe</title>
+<link type="text/css" href="resources/webgl-tutorials.css" rel="stylesheet" />
+</head>
+<body>
+<canvas></canvas>
+<div id="uiContainer">
+  <div id="ui">
+  </div>
+</div>
+</body>
+<script>
+const glState = {
+  [
+    new Section({
+      name: 'foo',
+      parts: [
+        new RenderState({ name: "viewport", set: ['viewport'], get: ['VIEWPORT'], }),
+        new RenderState({ name: "scissor", set: ['scissor'], get: ['SCISSOR_BOX'], }),
+      ],
+    }),
+    new Section({
+      name: 'vertices',
+      parts: [
+        { name: 'vertexArray', }
+      ],
+    });
+    new Section({
+      name: 'TEXTURES',
+      parts: [
+        new State({ name: "activeTexture",
+                    set: ['activeTexture'],
+                    get: ['ACTIVE_TEXTURE'],
+        }),
+        new Vector({
+          name: "textureUnits",
+          num: "MAX_COMBINED_TEXTURE_IMAGE_UNITS",
+          element: ??
+            { TEXTURE_2D: ??, TEXTURE_CUBE_MAP: ?? },
+            { TEXTURE_2D: ??, TEXTURE_CUBE_MAP: ?? },
+            { TEXTURE_2D: ??, TEXTURE_CUBE_MAP: ?? },
+        ],
+      ]
+    }),
+  ],
+};
+
+
+
+</script>
+</html>
