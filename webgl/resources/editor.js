@@ -48,6 +48,12 @@ function getHTML(url, callback) {
   req.send("");
 }
 
+function getPrefix(url) {
+  var u = new URL(window.location.origin + url);
+  var prefix = u.origin + dirname(u.pathname);
+  return prefix;
+}
+
 function fixSourceLinks(url, source) {
   var srcRE = /(src=)"(.*?)"/g;
   var linkRE = /(href=)"(.*?")/g
@@ -55,9 +61,7 @@ function fixSourceLinks(url, source) {
   var loadImageRE = /(loadImageAndCreateTextureInfo)\(('|")(.*?)('|")/g;
   var loadImagesRE = /loadImages(\s*)\((\s*)\[([^]*?)\](\s*),/g;
   var quoteRE = /"(.*?)"/g;
-
-  var u = new URL(window.location.origin + url);
-  var prefix = u.origin + dirname(u.pathname);
+  var prefix = getPrefix(url);
 
   function addPrefix(url) {
     return url.indexOf("://") < 0 ? (prefix + url) : url;
@@ -226,12 +230,14 @@ function getSourceBlob(options) {
   if (blobUrl) {
     URL.revokeObjectURL(blobUrl);
   }
+  var prefix = dirname(g.url);
   var source = g.html;
   source = source.replace("${hackedParams}", JSON.stringify(g.query));
   source = source.replace('${html}', htmlParts.html.editor.getValue());
   source = source.replace('${css}', htmlParts.css.editor.getValue());
   source = source.replace('${js}', htmlParts.js.editor.getValue());
-  source = source.replace('<head>', '<head>\n<script match="false">webglLessonSettings = ' + JSON.stringify(options) + ";</script>");
+  source = source.replace('<head>', '<head>\n<script match="false">webglLessonSettings = ' + JSON.stringify(options) + ';</script>');
+  source = source.replace('</head>', '<script src="' + prefix + '/resources/webgl-lessons-helper.js"></script>\n</head>');
 
   var scriptNdx = source.indexOf('<script>');
   g.numLinesBeforeScript = (source.substring(0, scriptNdx).match(/\n/g) || []).length;
