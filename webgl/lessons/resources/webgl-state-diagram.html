@@ -282,6 +282,9 @@ if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === 0) {
 
 <template id="program-template">
   <div class="webgl-object program" data-help="
+A program is a combination of a vertex shader
+and a fragment shader *linked* together.
+
 ```js
 const program = gl.createProgram();
 gl.attachShader(program, someVertexShader);
@@ -293,8 +296,6 @@ if (gl.getProgramParameter(program, gl.LINK_STATUS) === 0) {
 ```
 ">
     <div class="name">program</div>
-    <div class="across2 fill-height shaders"></div>
-    <div class="across2 program-inputs"></div>
   </div>
 </template>
 
@@ -827,18 +828,16 @@ function createShaderDisplay(parent, type, glsl) {
 function createProgramDisplay(parent, gl, vsGLSL, fsGLSL) {
   const prg = createProgram(gl, vsGLSL, fsGLSL);
   const prgElem = createTemplate(parent, '#program-template');
-  const shadersElem = prgElem.querySelector('.shaders');
 
-  createShaderDisplay(shadersElem, 'vertex', vsGLSL);
-  createShaderDisplay(shadersElem, 'fragment', fsGLSL);
+  createShaderDisplay(prgElem, 'vertex', vsGLSL);
+  createShaderDisplay(prgElem, 'fragment', fsGLSL);
 
-  const inputsElem = prgElem.querySelector('.program-inputs');
-  const attribExpander = createExpander(inputsElem, 'attribute info', {
+  const attribExpander = createExpander(prgElem, 'attribute info', {
     dataset: {
       hint: 'attributes are user defined. Their values come from buffers as specified in a *vertex array*.',
     },
   });
-  const uniformExpander = createExpander(inputsElem, 'uniforms', {
+  const uniformExpander = createExpander(prgElem, 'uniforms', {
     dataset: {
       hint: 'uniform values are user defined program state. The locations and values are different for each program.',
     },
@@ -1788,11 +1787,11 @@ var drawConnector = function() {
   };
   var posnBLeft = {
     x: divBPos.left - 8,
-    y: divBPos.top  + divAPos.height / 2
+    y: divBPos.top  + divBPos.height / 2
   };
   var posnBRight = {
     x: divBPos.left + divBPos.width + 8,
-    y: divBPos.top  + divAPos.height / 2
+    y: divBPos.top  + divBPos.height / 2
   };
   var dStrLeft =
       "M" +
