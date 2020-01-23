@@ -13,6 +13,17 @@
   outline: 1px solid red;
   cursor: pointer;
 }
+.draggable {
+  position: absolute;
+  box-shadow: 2px 2px 15px #000;
+}
+#arrows {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 999;
+  pointer-events: none;
+}
 #hint {
   position: absolute;
   display: inline-block;
@@ -24,6 +35,7 @@
   padding: 1em;
   max-width: 600px;
   font-family: Arial, Helvetica, sans-serif;
+  z-index: 1000;
 }
 #hint a {
   color: aquamarine;
@@ -52,6 +64,7 @@ body {
   display: inline-block;
   padding: 10px;
 }
+#global-state { background: hsl(0, 100%, 85%); }
 .texture { background: hsl(200, 100%, 85%); }
 .vertex-array { background: hsl(260, 100%, 85%); }
 .shader { background: hsl(30, 100%, 80%); }
@@ -72,6 +85,29 @@ body {
   flex: 1 1 auto;
   background: #23241f
 }
+.expander.open>div:first-child {
+  margin-bottom: 10px;
+}
+.expander>div:first-child::before {
+  content: '▶';
+}
+.expander>*:nth-child(0n+2) {
+  display: none;
+}
+.expander {
+  padding: 0 0.5em 0 0.5em;
+}
+.expander.open {
+  background: rgba(255, 255, 255, 0.3);
+  padding: 0.5em;
+}
+.expander.open>*:nth-child(0n+2) {
+  display: unset;
+}
+.expander.open>div:first-child:before {
+  content: '▼';
+}
+
 table {
   border-collapse: collapse;
   display: block;
@@ -140,19 +176,6 @@ th {
 </style>
 <body>
 
-<div class="state-block texture-units">
-  <div class="name">
-    Texture Units
-  </div>
-  <div>
-      <table>
-        <thead><th>2D</th><th>CUBE_MAP</th></thead>
-        <tbody>
-        </tbody>
-      </table>
-  </div>
-</div>
-
 <template id="texture-template">
 <div class="webgl-object texture" data-help="
 Textures are created with
@@ -182,8 +205,16 @@ texture = textureUnits[activeTexture][bindPoint]
 </div>
 </template>
 
+<template id="vertex-attributes-template">
+      <table>
+        <thead><th>enabled</th><th>value</th><th>size</th><th>type</th><th>normalize</th><th>stride</th><th>offset</th><th>buffer</th><th>divisor</th></thead>
+        <tbody>
+        </tbody>
+      </table>
+</template>
+
 <template id="vertex-array-template">
-<div class="webgl-object vertex-array" data-help="
+  <div class="webgl-object vertex-array" data-help="
 Normally there is only the 1 default vertex array in WebGL 1.0.
 
 You can create more vertex arrays with the
@@ -203,31 +234,14 @@ ext.bindVertexArrayOES(someVertexArray);
 
 Passing `null` to `gl.bindVertexArrayOES` binds the default vertex array.
 ">
-  <div class="name">vertex array</div>
-  <div class="state-table">
-      <table>
-        <thead><th>enabled</th><th>value</th><th>size</th><th>type</th><th>normalize</th><th>stride</th><th>offset</th><th>buffer</th><th>divisor</th></thead>
-        <tbody>
-        </tbody>
-      </table>
+    <div class="name">vertex array</div>
+    <div class="state-table">
+    </div>
   </div>
-</div>
 </template>
 
-<template id="program-template">
-<div class="webgl-object program" data-help="
-```js
-const program = gl.createProgram();
-gl.attachShader(program, someVertexShader);
-gl.attachShader(program, someFragmentShader);
-gl.linkProgram(program);
-if (gl.getProgramParameter(program, gl.LINK_STATUS) === 0) {
-  console.error(gl.getProgramInfoLog(program));
-}
-```
-">
-  <div class="name">program</div>
-  <div class="across2 fill-height">
+<template id="vertex-shader-template">
+  <div>
     <div class="webgl-object shader vertex-shader" data-help="
 A vertex shader's sole responsibility is to set `gl_Position`
 to a clip space position. To create one use:
@@ -241,9 +255,13 @@ if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === 0) {
 }
 ```
 ">
-      <div class="name">vertex shader</div>
       <pre><code class="lang-glsl"></code></pre>
     </div>
+  </div>
+</template>
+
+<template id="fragment-shader-template">
+  <div>
     <div class="webgl-object shader fragment-shader" data-help="
 A fragment shader's sole responsibility is to set `gl_FragColor`
 to a color. To create one use:
@@ -257,34 +275,43 @@ if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === 0) {
 }
 ```
 ">
-      <div class="name">fragment shader</div>
       <pre><code class="lang-glsl"></code></pre>
     </div>
   </div>
-  <div class="across2">
-    <div class="program-attributes" data-help="
-attributes are user defined. Their values come from buffers as specified in a *vertex array*.
-    ">
-      <div class="name">attribute info</div>
-      <table>
-        <thead><th>name</th><th>location</th></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <div class="program-uniforms" data-help="
-uniform values are user defined program state. The locations and values
-are different for each program.
-    ">
-      <div class="name">uniforms</div>
-      <table>
-        <thead><th>name</th><th>loc</th><th>value</th></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-</div>
 </template>
 
+<template id="program-template">
+  <div class="webgl-object program" data-help="
+```js
+const program = gl.createProgram();
+gl.attachShader(program, someVertexShader);
+gl.attachShader(program, someFragmentShader);
+gl.linkProgram(program);
+if (gl.getProgramParameter(program, gl.LINK_STATUS) === 0) {
+  console.error(gl.getProgramInfoLog(program));
+}
+```
+">
+    <div class="name">program</div>
+    <div class="across2 fill-height shaders"></div>
+    <div class="across2 program-inputs"></div>
+  </div>
+</template>
+
+<div id="global-state"></div>
+
+<svg id="arrows" width="100%" height="100%">
+  <defs>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="3" refY="5"
+        markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" />
+    </marker>
+  </defs>
+  <g fill="none" stroke="black" stroke-width="2" marker-end="url(#arrowhead)">
+    <path id="arrowLeft"/>
+    <path id="arrowRight"/>
+  </g>  
+</svg>
 <div id="hint"></div>
 
 
@@ -360,17 +387,6 @@ const webglFuncs = `
 
 const depthState = [
   {
-    pname: 'DEPTH_CLEAR_VALUE',
-    value: '1',
-    help: `
-    the value to clear the depth buffer to
-
-    ---js
-    gl.clearDepth(value);
-    ---
-    `,
-  },
-  {
     pname: 'DEPTH_TEST',
     value: 'TRUE',
     help: `
@@ -431,7 +447,7 @@ function addElem(tag, parent, attrs = {}) {
         try {
         elem[key][k] = v;
         } catch (e) {
-          debugger;
+          debugger;  // eslint-disable-line no-debugger
         }
       }
     } else if (elem[key] === undefined) {
@@ -444,8 +460,81 @@ function addElem(tag, parent, attrs = {}) {
   return elem;
 }
 
-function createStateTable(states, parent) {
-  const table = addElem('table', parent);
+function toggleExpander(e) {
+  e.target.parentElement.classList.toggle('open');
+}
+
+let dragTarget;
+let dragMouseStartX;
+let dragMouseStartY;
+let dragTargetStartX;
+let dragTargetStartY;
+
+function dragStart(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  dragTarget = this;
+  const rect = this.getBoundingClientRect();
+  dragMouseStartX = e.pageX;
+  dragMouseStartY = e.pageY;
+  dragTargetStartX = (window.scrollX + rect.left) | 0; // parseInt(this.style.left || '0');
+  dragTargetStartY = (window.scrollY + rect.top) | 0;  // parseInt(this.style.top || '0');
+
+  window.addEventListener('mousemove', dragMove, {passive: false});
+  window.addEventListener('mouseup', dragStop, {passive: false});
+
+  const elements = [];
+  document.querySelectorAll('.draggable').forEach(elem => {
+    if (elem !== this) {
+      elements.push(elem);
+    }
+  });
+  elements.sort((a, b) => a.style.zIndex > b.style.zIndex);
+  elements.push(this);
+  elements.forEach((elem, ndx) => {
+    elem.style.zIndex = ndx + 1;
+  });
+}
+
+function dragMove(e) {
+  if (dragTarget) {
+    e.preventDefault();
+    e.stopPropagation();
+    const x = dragTargetStartX + (e.pageX - dragMouseStartX);
+    const y = dragTargetStartY + (e.pageY - dragMouseStartY);
+    dragTarget.style.left = px(x);
+    dragTarget.style.top = px(y);
+    drawConnector();
+  }
+}
+
+function dragStop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  dragTarget = undefined;
+  window.removeEventListener('mousemove', dragMove);
+  window.removeEventListener('mouseup', dragStop);
+}
+
+function makeDraggable(elem) {
+  const div = addElem('div', elem.parentElement, {className: 'draggable'});
+  elem.parentElement.removeChild(elem);
+  div.appendChild(elem);
+  div.addEventListener('mousedown', dragStart, {passive: false});
+}
+
+function createExpander(parent, title, attrs = {}) {
+  const outer = addElem('div', parent, Object.assign({className: 'expander'}, attrs));
+  const titleElem = addElem('div', outer, {
+    textContent: title,
+  });
+  titleElem.addEventListener('click', toggleExpander);
+  return outer;
+}
+
+function createStateTable(states, parent, title) {
+  const expander = createExpander(parent, title);
+  const table = addElem('table', expander);
   const tbody = addElem('tbody', table);
   for (const state of states) {
     const {pname, value, help} = state;
@@ -454,6 +543,7 @@ function createStateTable(states, parent) {
     addElem('td', tr, {textContent: pname});
     addElem('td', tr, {textContent: value});
   }
+  return expander;
 }
 
 function createShader(gl, type, glslString) {
@@ -518,6 +608,8 @@ function isBuiltIn(info) {
 }
 
 function createProgramAttributes(parent, gl, program) {
+  const tbody = createTable(parent, ['name', 'location']);
+
   const numAttribs = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
   for (let ii = 0; ii < numAttribs; ++ii) {
     const attribInfo = gl.getActiveAttrib(program, ii);
@@ -525,7 +617,7 @@ function createProgramAttributes(parent, gl, program) {
         continue;
     }
     const index = gl.getAttribLocation(program, attribInfo.name);
-    const tr = addElem('tr', parent);
+    const tr = addElem('tr', tbody);
     const help = helpToMarkdown(`
       get attribute location with
 
@@ -548,7 +640,6 @@ function createProgramAttributes(parent, gl, program) {
     `);
     addElem('td', tr, {textContent: attribInfo.name, dataset: {help}});
     addElem('td', tr, {textContent: index, dataset: {help}});
-    parent.appendChild(tr);
   }
 }
 
@@ -686,7 +777,15 @@ return function(type) {
 
 }());
 
+function createTable(parent, headings) {
+  const table = addElem('table', parent);
+  const thead = addElem('thead', table);
+  headings.forEach(heading => addElem('th', thead, {textContent: heading}));
+  return addElem('tbody', table);
+}
+
 function createProgramUniforms(parent, gl, program) {
+  const tbody = createTable(parent, ['name', 'loc', 'value']);
   const uniformSetters = { };
   const numUniforms = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
 
@@ -704,7 +803,7 @@ function createProgramUniforms(parent, gl, program) {
     const info = getUniformInfo(uniformInfo.type);
     const help = helpToMarkdown(`---js\ngl.useProgram(program); // set current program\n${info.setter}\n---`);
 
-    const tr = addElem('tr', parent);
+    const tr = addElem('tr', tbody);
     addElem('td', tr, {textContent: name, dataset: {help}});
     addElem('td', tr, {
       textContent: '?',
@@ -716,33 +815,64 @@ function createProgramUniforms(parent, gl, program) {
       textContent: gl.getUniform(program, loc).toString(),
       dataset: {help},
     });
-    parent.appendChild(tr);
   }
+}
+
+function createShaderDisplay(parent, type, glsl) {
+  const expander = createExpander(parent, `${type} shader`);
+  createTemplate(expander, `#${type}-shader-template`);
+  expander.querySelector('.lang-glsl').textContent = glsl;
 }
 
 function createProgramDisplay(parent, gl, vsGLSL, fsGLSL) {
   const prg = createProgram(gl, vsGLSL, fsGLSL);
-  const template = document.querySelector('#program-template');
-  const prgElem = template.content.cloneNode(true);
-  prgElem.querySelector('.vertex-shader .lang-glsl').textContent = vsGLSL;
-  prgElem.querySelector('.fragment-shader .lang-glsl').textContent = fsGLSL;
+  const prgElem = createTemplate(parent, '#program-template');
+  const shadersElem = prgElem.querySelector('.shaders');
 
-  createProgramAttributes(prgElem.querySelector('.program-attributes tbody'), gl, prg);
-  createProgramUniforms(prgElem.querySelector('.program-uniforms tbody'), gl, prg);
+  createShaderDisplay(shadersElem, 'vertex', vsGLSL);
+  createShaderDisplay(shadersElem, 'fragment', fsGLSL);
 
-  parent.appendChild(prgElem);
+  const inputsElem = prgElem.querySelector('.program-inputs');
+  const attribExpander = createExpander(inputsElem, 'attribute info', {
+    dataset: {
+      hint: 'attributes are user defined. Their values come from buffers as specified in a *vertex array*.',
+    },
+  });
+  const uniformExpander = createExpander(inputsElem, 'uniforms', {
+    dataset: {
+      hint: 'uniform values are user defined program state. The locations and values are different for each program.',
+    },
+  });
+
+  createProgramAttributes(attribExpander, gl, prg);
+  createProgramUniforms(uniformExpander, gl, prg);
+
+  makeDraggable(prgElem);
+  return prgElem;
+}
+
+function createTemplate(parent, selector) {
+  const template = document.querySelector(selector);
+  const collection = template.content.cloneNode(true);
+  if (collection.children.length !== 1) {
+    throw new Error('template must have 1 child');
+  }
+  const elem = collection.children[0];
+  parent.appendChild(elem);
+  return elem;
 }
 
 function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
-  const template = document.querySelector('#vertex-array-template');
-  const vaElem = template.content.cloneNode(true);
-
+  const vaElem = createTemplate(parent, '#vertex-array-template');
   const vaoNote = helpToMarkdown(`
     note: the current vertex array can be set with the
     [--OES_vertex_array_object--](https://www.khronos.org/registry/webgl/extensions/OES_vertex_array_object/)
     extension. Otherwise there is only the 1 default vertex array in WebGL 1.0.
   `);
-  const attrsElem = vaElem.querySelector('tbody');
+  const attrExpander = createExpander(vaElem.querySelector('.state-table'), 'attributes');
+  const table = createTemplate(attrExpander, '#vertex-attributes-template');
+  const attrsElem = table.querySelector('tbody');
+
   for (let i = 0; i < maxAttribs; ++i) {
     const {size = 1, type = 'FLOAT', normalize = 'false', stride = '0', offset = '0', buffer = 'null', divisor = '0'} = attribs[i] || {};
     const enabled = i < attribs.length;
@@ -917,9 +1047,9 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
       `,
     },
   ];
-  createStateTable(vaState, vaElem.querySelector('.state-table'));
-
-  parent.appendChild(vaElem);
+  createStateTable(vaState, vaElem.querySelector('.state-table'), 'state');
+  makeDraggable(vaElem);
+  return vaElem;
 }
 
 const stencilOps = helpToMarkdown(`--KEEP--, --ZERO--, --REPLACE--, --INCR--, --INCR_WRAP--, --DECR--, --DECR_WRAP--, --INVERT--`);
@@ -978,17 +1108,6 @@ const stencilState = [
       ---js
       gl.enable(gl.STENCIL_TEST);
       gl.disable(gl.STENCIL_TEST);
-      ---
-      `,
-    },
-    {
-      pname: 'STENCIL_CLEAR_VALUE',
-      value: '0xFF',
-      help: `
-      value to clear stencil to when --gl.clear(gl.STENCIL_BUFFER_BIT);-- is called. 
-
-      ---js
-      gl.clearStencil(0xFF);
       ---
       `,
     },
@@ -1256,93 +1375,218 @@ ${blendEquationSnippet}
 const polygonState = [
     {
       pname: 'CULL_FACE',
-      value: '',
+      value: 'false',
       help: `
+      Whether or not to cull triangles based on which way they are facing.
+
+      ---js
+      // enable
+      gl.enable(gl.CULL_FACE);
+
+      // disable
+      gl.disable(gl.CULL_FACE);
+      ---
       `,
     },
     {
       pname: 'CULL_FACE_MODE',
-      value: '',
+      value: 'BACK',
       help: `
+      Which faces are culled when culling is on. Valid values are
+      --FRONT--, --BACK--, --FRONT_AND_BACK--. 
+
+      ---js
+      gl.cullFace(gl.FRONT);
+      ---
+      `,
+    },
+    {
+      pname: 'FRONT_FACE',
+      value: 'CCW',
+      help: `
+      Which faces are considered front facing. Valid values are
+      --CW--, --CCW--. 
+
+      ---js
+      gl.frontFace(gl.CW);
+      ---
       `,
     },
     {
       pname: 'POLYGON_OFFSET_UNITS',
-      value: '',
-      help: `
+      value: '0',
+      help: `The amount to offset the calculated depth value for the depth test.
+
+      ---js
+      const factor = 0;
+      const units = 1;
+      gl.polygonOffset(factor, units);
+      ---
       `,
     },
     {
       pname: 'POLYGON_OFFSET_FACTOR',
-      value: '',
-      help: `
-      `,
-    },
-]
+      value: '0',
+      help: `The depth factor to offset the calculated depth value for the depth test.
 
-const colorState = [
-    {
-      pname: 'COLOR_CLEAR_VALUE',
-      value: '',
-      help: `
-      `,
-    },
-    {
-      pname: 'COLOR_WRITEMASK',
-      value: '',
-      help: `
-      `,
-    },
-
-]
-const miscState = [
-    {
-      pname: 'VIEWPORT',
-      value: '',
-      help: `
-      `,
-    },
-
-    {
-      pname: 'SCISSOR_TEST',
-      value: '',
-      help: `
-      `,
-    },
-    {
-      pname: 'SCISSOR_BOX',
-      value: '',
-      help: `
-      `,
-    },
-
-    {
-      pname: 'UNPACK_ALIGNMENT',
-      value: '',
-      help: `
-      `,
-    },
-    {
-      pname: 'PACK_ALIGNMENT',
-      value: '',
-      help: `
+      ---js
+      const factor = 1;
+      const units = 0;
+      gl.polygonOffset(factor, units);
+      ---
       `,
     },
 ];
 
+const clearState = [
+    {
+      pname: 'COLOR_CLEAR_VALUE',
+      value: '0, 0, 0, 0',
+      help: `
+      Value to clear the color buffer to when calling --gl.clear--
+      with the --gl.COLOR_BUFFER_BIT-- set
 
+      Be aware by default a canvas is composited with the webpage
+      using premultiplied alpha.
 
+      ---js
+      const r = 1;
+      const g = 0.5;
+      const b = 0.3;
+      const a = 1;
+      gl.clearColor(r, g, b, a);
+      ---
+      `,
+    },
+    {
+      pname: 'DEPTH_CLEAR_VALUE',
+      value: '1',
+      help: `
+      the value to clear the depth buffer to when calling --gl.clear--
+      with the --gl.DEPTH_BUFFER_BIT-- set
+
+      ---js
+      gl.clearDepth(value);
+      ---
+      `,
+    },
+    {
+      pname: 'STENCIL_CLEAR_VALUE',
+      value: '0xFF',
+      help: `
+      the value to clear the depth buffer to when calling --gl.clear--
+      with the --gl.STENCIL_BUFFER_BIT-- set
+
+      ---js
+      gl.clearStencil(0xFF);
+      ---
+      `,
+    },
+];
+
+const miscState = [
+    {
+      pname: 'COLOR_WRITEMASK',
+      value: 'true, true, true, true',
+      help: `
+      sets which channels can be written to. Set with
+
+      ---js
+      const red = true;
+      const green = true;
+      const blue = true;
+      const alpha = true;
+      gl.colorMask(red, green, blue, alpha);
+      ---
+      `,
+    },
+    {
+      pname: 'VIEWPORT',
+      value: '0, 0, 300, 150',
+      help: `
+      How to convert from clip space to pixel space.
+
+      ---js
+      const x = 0;
+      const y = 0;
+      const width = gl.canvas.width;
+      const height = gl.canvas.height;
+      gl.viewport(x, y, width, height);
+      ---
+      `,
+    },
+    {
+      pname: 'SCISSOR_TEST',
+      value: 'false',
+      help: `
+      Whether the scissor test is enabled
+
+      ---js
+      // enable
+      gl.enable(gl.SCISSOR_TEST);
+
+      // disable
+      gl.disable(gl.SCISSOR_TEST);
+      ---
+      `,
+    },
+    {
+      pname: 'SCISSOR_BOX',
+      value: '0, 0, 0, 0',
+      help: `
+      The dimensions of the scissor test. If the the scissor test is enabled
+      then WebGL will not rendered pixels outside the scissor box.
+
+      ---js
+      const x = 50;
+      const y = 60;
+      const width = 70;
+      const height = 80;
+      gl.scissor(x, y, width, height);
+      ---
+      `,
+    },
+    {
+      pname: 'UNPACK_ALIGNMENT',
+      value: '4',
+      help: `
+      Used by --texImage-- functions. Each row of data
+      must be aligned by this number of bytes and a multiple of this
+      number of bytes. Valid values are --1--, --2--, --4--, and --8--.
+      Default: --4--
+
+      ---js
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      ---
+      `,
+    },
+    {
+      pname: 'PACK_ALIGNMENT',
+      value: '4',
+      help: `
+      Used by --readPixels-- function. Each row of data
+      must be aligned by this number of bytes and a multiple of this
+      number of bytes. Valid values are --1--, --2--, --4--, and --8--.
+      Default: --4--
+
+      ---js
+      gl.pixelStorei(gl.PACK_ALIGNMENT, 1);
+      ---
+      `,
+    },
+];
 
 function createTextureDisplay(parent, imgHref) {
-  const template = document.querySelector('#texture-template');
-  const texElem = template.content.cloneNode(true);
+  const texElem = createTemplate(parent, '#texture-template');
 
   const activeTexNote = helpToMarkdown(`
     note: the texture affected is the current active texture on
     the specified bind point. ie (--webglState.textureUnits[activeTexture][bindPoint]--)
   `);
 
-  const mipsElem = texElem.querySelector('.mips');
+  const mipsExpander = createExpander(texElem, 'mips');
+  const mipsOuterElem = addElem('div', mipsExpander);
+  const mipsElem = addElem('div', mipsOuterElem, {className: 'mips'});
   const numMips = 8;
   for (let i = 0; i < numMips; ++i) {
     const size = 2 ** (numMips - i - 1);
@@ -1457,16 +1701,18 @@ function createTextureDisplay(parent, imgHref) {
     },
   ];
 
-  createStateTable(texState, texElem.querySelector('.texture'));
-  parent.appendChild(texElem);
+  createStateTable(texState, texElem, 'texture state');
+  makeDraggable(texElem);
+  return texElem;
 }
 
-function createTextureUnits(maxUnits = 8) {
-  const tbody = document.querySelector('.texture-units tbody');
+function createTextureUnits(parent, maxUnits = 8) {
+  const expander = createExpander(parent, 'Texture Units');
+  const tbody = createTable(expander, ['2D', 'CUBE_MAP']);
   for (let i = 0; i < maxUnits; ++i) {
     const tr = addElem('tr', tbody);
     addElem('td', tr, {
-      textContent: '2D',
+      textContent: 'null',
       dataset: {
         help: helpToMarkdown(`
           bind a texture to this unit with
@@ -1479,7 +1725,7 @@ function createTextureUnits(maxUnits = 8) {
       },
     });
     addElem('td', tr, {
-      textContent: 'CUBE_MAP',
+      textContent: 'null',
       dataset: {
         help: helpToMarkdown(`
           bind a texture to this unit with
@@ -1492,13 +1738,20 @@ function createTextureUnits(maxUnits = 8) {
       },
     });
   }
+  return expander;
 }
 
-createStateTable(depthState, document.body);
-createStateTable(blendState, document.body);
-createStateTable(stencilState, document.body);
+const globalState = document.querySelector('#global-state');
+createTextureUnits(globalState, 8);
+createStateTable(miscState, globalState, 'misc state');
+createStateTable(clearState, globalState, 'clear state');
+createStateTable(depthState, globalState, 'depth state');
+createStateTable(blendState, globalState, 'blend state');
+createStateTable(stencilState, globalState, 'stencil state');
+createStateTable(polygonState, globalState, 'polygon state');
+makeDraggable(globalState);
 
-createTextureDisplay(document.body, '/webgl/resources/f-texture.png');
+const tx = createTextureDisplay(document.body, '/webgl/resources/f-texture.png');
 
 createVertexArrayDisplay(document.body, [
   {size: 2, type: 'FLOAT', buffer: 'texcoordBuffer',},
@@ -1508,158 +1761,58 @@ createVertexArrayDisplay(document.body, [
 
 createProgramDisplay(document.body, gl, vs, fs);
 
-createTextureUnits(8);
+var divA       = globalState;
+var divB       = tx;
+var arrowLeft  = document.querySelector("#arrowLeft");
+var arrowRight = document.querySelector("#arrowRight");
 
-function matToStr(m) {
-  return `matrix(${m[0]},${m[1]},${m[4]},${m[5]},${m[12]},${m[13]})`;
+function getPageRelativePos(elem) {
+  const rect = elem.getBoundingClientRect();
+  return {
+    left: rect.left + window.scrollX | 0,
+    top: rect.top + window.scrollY | 0,
+    width: rect.width,
+    height: rect.height,
+  };
 }
-
-const m = {
-  translation: (x, y) => matToStr(m4.translation(x, y, 0)),
-  rotation: (a) => matToStr(m4.zRotation(a)),
-  scale: (x, y) => matToStr(m4.scaling(x, y === undefined ? x : y, 1)),
+var drawConnector = function() {
+  const divAPos = getPageRelativePos(divA);
+  const divBPos = getPageRelativePos(divB);
+  var posnALeft = {
+    x: divAPos.left - 8,
+    y: divAPos.top  + divAPos.height / 2,
+  };
+  var posnARight = {
+    x: divAPos.left + divAPos.width + 8,
+    y: divAPos.top  + divAPos.height / 2    
+  };
+  var posnBLeft = {
+    x: divBPos.left - 8,
+    y: divBPos.top  + divAPos.height / 2
+  };
+  var posnBRight = {
+    x: divBPos.left + divBPos.width + 8,
+    y: divBPos.top  + divAPos.height / 2
+  };
+  var dStrLeft =
+      "M" +
+      (posnALeft.x      ) + "," + (posnALeft.y) + " " +
+      "C" +
+      (posnALeft.x - 100) + "," + (posnALeft.y) + " " +
+      (posnBLeft.x - 100) + "," + (posnBLeft.y) + " " +
+      (posnBLeft.x      ) + "," + (posnBLeft.y);
+  arrowLeft.setAttribute("d", dStrLeft);
+  var dStrRight =
+      "M" +
+      (posnBRight.x      ) + "," + (posnBRight.y) + " " +
+      "C" +
+      (posnBRight.x + 100) + "," + (posnBRight.y) + " " +
+      (posnARight.x + 100) + "," + (posnARight.y) + " " +
+      (posnARight.x      ) + "," + (posnARight.y);
+  arrowRight.setAttribute("d", dStrRight);
 };
 
-class MatrixStack {
-  constructor() {
-    this.reset();
-  }
-  _topRef() {
-    return this._stack[this._stack.length - 1];
-  }
-  translate(x, y, z = 0) {
-    m4.translate(this._topRef(), x, y, z, this._topRef());
-    return this;
-  }
-  rotate(a) {
-    m4.zRotate(this._topRef(), a, this._topRef());
-    return this;
-  }
-  scale(x, y) {
-    m4.scale(this._topRef(), x, y === undefined ? x : y, 1, this._topRef());
-    return this;
-  }
-  push() {
-    this._stack.push(this._topRef().slice());
-  }
-  pop() {
-    this._stack.pop();
-  }
-  scope(fn) {
-    this.push();
-    fn();
-    this.pop();
-  }
-  reset() {
-    this._stack = [m4.identity()];
-  }
-  current() {
-    return matToStr(this._topRef());
-  }
-}
-
-const ms = new MatrixStack();
-
-function addSVG(tag, parent, attrs) {
-  const elem = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [key, value] of Object.entries(attrs)) {
-    elem.setAttribute(key, value);
-  }
-  parent.appendChild(elem);
-  return elem;
-}
-
-const svg = addSVG('svg', document.body, {
-  width: '100%',
-  height: '100%',
-  viewBox: '0 0 640 480',
-  version: '1.1',
-  xmlns: "http://www.w3.org/2000/svg",
-  style: styleToText({
-    'font-family': 'monospace',
-  }),
-});
-
-function attrsPlusClass(attrs, className) {
-  if (className) {
-    attrs['class'] = className;
-  }
-  return attrs;
-}
-
-
-function addText(parent, str, x, y, className, style) {
-  const attrs = attrsPlusClass({
-    x,
-    y,
-    ...style && {style},
-  }, className);
-  const text = addSVG('text', parent, attrs);
-  text.textContent = str;
-  return text;
-}
-
-function addRect(parent, x, y, width, height, style, className) {
-  const attrs = attrsPlusClass({
-    x,
-    y,
-    width,
-    height,
-    ...style && {style},
-  }, className);
-  return addSVG('rect', parent, attrs);
-}
-
-function addGroup(parent, transform) {
-  transform = transform || ms.current();
-  return addSVG('g', parent, {transform})
-}
-
-const s = {
-  texUnit: {
-    count: 8,
-    width: 200,
-    height: 20,
-  },
-};
-
-const texUnitsGroup = addGroup(svg);
-const texUnits = addRect(texUnitsGroup, 0, 0, 200, 300, 'fill:red;');
-ms.scope(() => {
-  for (let i = 0; i < s.texUnit.count; ++i) {
-    const texUnitGroup = addGroup(texUnitsGroup);
-    const w2d = s.texUnit.width / 4 | 0;
-    const h = s.texUnit.height;
-    const tex2D = addGroup(texUnitGroup, m.translation(0, 0));
-    tex2D.dataset['help'] = helpToMarkdown(`
----js
-// select this texture unit
-gl.activeTexture(gl.TEXTURE0 + ${i});
-
-// bind a texture
-gl.bindTexture(gl.TEXTURE_2D, tex);
----
-`);
-    tex2D.setAttribute('class', 'hint');
-    addRect(tex2D, 0, 0, w2d, h, styleToText({fill: hsl(.3, i / 16 + .5, .5)}), 'box');
-    addText(tex2D, '2D', w2d / 2, h / 2, 'svg-center');
-
-    const wcb = s.texUnit.width - w2d;
-    const texCB = addGroup(texUnitGroup, m.translation(w2d, 0));
-    texCB.dataset['hint'] = helpToMarkdown(`
----js
-gl.activeTexture(gl.TEXTURE0 + ${i});
-gl.bindTexture(gl.TEXTURE_CUBE_MAP, tex);
----
-`);
-    texCB.setAttribute('class', 'hint');
-    addRect(texCB, 0, 0, wcb, h, styleToText({fill: hsl(.3, i / 16 + .5, .5)}), 'box');
-    addText(texCB, 'CUBEMAP', wcb / 2, h / 2, 'svg-center');
-    ms.translate(0, s.texUnit.height);
-  }
-});
-ms.pop();
-
+drawConnector();
 
 
 </script>
