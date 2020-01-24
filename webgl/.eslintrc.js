@@ -87,7 +87,10 @@ module.exports = {
   },
   "overrides": [
     {
-      "files": [ "resources/**/*.js" ],
+      "files": [
+        "resources/**/*.js",
+        "lessons/resources/**/*.js",
+      ],
       "rules": {
         "optional-comma-spacing/optional-comma-spacing": [2, {"after": true}],
         "no-unused-vars": 2,
