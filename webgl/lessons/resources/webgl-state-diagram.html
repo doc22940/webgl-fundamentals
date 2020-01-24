@@ -1,5 +1,16 @@
+<!-- 
+
+idea:
+
+Show some webgl code. Let user step through, show 
+updates to state.  lLiI1
+
+-->
 <link href="/3rdparty/monokai-sublime.css" rel="stylesheet">
 <style>
+body {
+  margin: 0;
+}
 .svg-center {
   text-anchor: middle;
   dominant-baseline: central;
@@ -59,6 +70,7 @@ body {
   background: hsl(240, 100%, 85%);
   display: inline-block;
 }
+.title,
 .webgl-object {
   border: 1px solid black;
   display: inline-block;
@@ -100,6 +112,7 @@ body {
 .expander.open {
   background: rgba(255, 255, 255, 0.3);
   padding: 0.5em;
+  /* animation: flash 1s 1; */
 }
 .expander.open>*:nth-child(0n+2) {
   display: unset;
@@ -107,6 +120,14 @@ body {
 .expander.open>div:first-child:before {
   content: '▼';
 }
+
+@keyframes flash {
+  1% {
+    background-color: red;
+  }
+}
+    
+
 
 table {
   border-collapse: collapse;
@@ -173,8 +194,50 @@ th {
   width: 1px;
   height: 1px;
 }
+#everything {
+  display: flex;
+}
+#diagram {
+  flex: 3 1 auto;
+  width: 70%;
+  user-select: none;
+}
+#code {
+  flex: 1 1 auto;
+  overflow: scroll;
+  background: #444;
+  color: white;
+  width: 30%;
+  max-height: 100vh;
+}
+#code pre {
+  margin: 0;
+}
 </style>
 <body>
+<div id="everything">
+  <div id="diagram">
+    <canvas></canvas>
+    <div id="global-state">
+      <div class="title">global state</div>
+    </div>
+
+    <svg id="arrows" width="100%" height="100%">
+      <defs>
+        <marker id="arrowhead" viewBox="0 0 10 10" refX="3" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" />
+        </marker>
+      </defs>
+      <g fill="none" stroke="black" stroke-width="2" marker-end="url(#arrowhead)">
+        <path id="arrowLeft"/>
+        <path id="arrowRight"/>
+      </g>  
+    </svg>
+  </div>
+  <div id="code"></div>
+</div>
+<div id="hint"></div>
 
 <template id="texture-template">
 <div class="webgl-object texture" data-help="
@@ -299,34 +362,161 @@ if (gl.getProgramParameter(program, gl.LINK_STATUS) === 0) {
   </div>
 </template>
 
-<div id="global-state"></div>
-
-<svg id="arrows" width="100%" height="100%">
-  <defs>
-    <marker id="arrowhead" viewBox="0 0 10 10" refX="3" refY="5"
-        markerWidth="6" markerHeight="6" orient="auto">
-      <path d="M 0 0 L 10 5 L 0 10 z" />
-    </marker>
-  </defs>
-  <g fill="none" stroke="black" stroke-width="2" marker-end="url(#arrowhead)">
-    <path id="arrowLeft"/>
-    <path id="arrowRight"/>
-  </g>  
-</svg>
-<div id="hint"></div>
-
-
-
 </body>
 <script src="/3rdparty/showdown.min.js"></script>
 <script src="/3rdparty/highlight.pack.js"></script>
 <script src="../../resources/m4.js"></script>
-<script>
+<script id="js" type="not-js">
 'use strict';
 
-hljs.initHighlightingOnLoad();
+const vs = `
+attribute vec4 position;
+attribute vec3 normal;
+attribute vec2 texcoord;
 
-const gl = document.createElement('canvas').getContext('webgl');
+uniform mat4 projection;
+uniform mat4 modelView;
+
+varying vec3 v_normal;
+varying vec2 v_texcoord;
+
+void main() {
+    gl_Position = projection * modelView * position;
+    v_normal = mat3(modelView) * normal;
+    v_texcoord = texcoord;
+}
+`;
+
+const fs = `
+precision highp float;
+
+varying vec3 v_normal;
+varying vec2 v_texcoord;
+
+uniform sampler2D diffuse;
+uniform vec3 lightDir;
+
+void main() {
+    vec3 normal = normalize(v_normal);
+    float light = dot(normal, lightDir) * 0.5 + 0.5;
+    vec4 color = texture2D(diffuse, v_texcoord);
+    gl_FragColor = vec4(color.rgb * light, color.a);
+}
+`;
+
+const cubeVertexPositions = new Float32Array([1, 1, -1, 1, 1, 1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, -1, -1, -1, -1, -1, 1, -1, 1, 1, 1, 1, 1, 1, 1, -1, -1, 1, -1, -1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1, 1, 1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1, -1, 1, -1, 1, 1, -1, 1, -1, -1, -1, -1, -1]);
+const cubeVertexNormals   = new Float32Array([1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1]);
+const cubeVertexTexcoords = new Float32Array([1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1]);
+const cubeVertexIndices   = new Uint16Array([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15, 16, 17, 18, 16, 18, 19, 20, 21, 22, 20, 22, 23],);
+
+const gl = document.querySelector('canvas').getContext('webgl');
+const prg = createProgram(gl, vs, fs);
+
+const positionLoc = gl.getAttribLocation(prg, 'position');
+const normalLoc = gl.getAttribLocation(prg, 'normal');
+const texcoordLoc = gl.getAttribLocation(prg, 'texcoord');
+
+const projectionLoc = gl.getUniformLocation(prg, 'projection');
+const modelViewLoc = gl.getUniformLocation(prg, 'modelView');
+const diffuseLoc = gl.getUniformLocation(prg, 'diffuse');
+const lightDirLoc = gl.getUniformLocation(prg, 'lightDir');
+
+const positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, cubeVertexPositions, gl.STATIC_DRAW);
+
+const normalBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, cubeVertexNormals, gl.STATIC_DRAW);
+
+const texcoordBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, cubeVertexTexcoords, gl.STATIC_DRAW);
+
+const indexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndices, gl.STATIC_DRAW);
+
+const checkerTexture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, checkerTexture);
+gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,                // mip level
+    gl.LUMINANCE,     // internal format
+    4,                // width
+    4,                // height
+    0,                // border
+    gl.LUMINANCE,     // format
+    gl.UNSIGNED_BYTE, // type
+    new Uint8Array([  // data
+      192, 128, 192, 128,
+      128, 192, 128, 192,
+      192, 128, 192, 128,
+      128, 192, 128, 192,
+    ]));
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+gl.clearColor(0.5, 0.7, 1.0, 1.0);
+gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+gl.enable(gl.DEPTH_TEST);
+gl.enable(gl.CULL_FACE);
+
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+gl.enableVertexAttribArray(positionLoc);
+gl.vertexAttribPointer(positionLoc, 3, gl.FLOAT, false, 0, 0);
+
+gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+gl.enableVertexAttribArray(normalLoc);
+gl.vertexAttribPointer(normalLoc, 3, gl.FLOAT, false, 0, 0);
+
+gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
+gl.enableVertexAttribArray(texcoordLoc);
+gl.vertexAttribPointer(texcoordLoc, 2, gl.FLOAT, false, 0, 0);
+
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+
+gl.useProgram(prg);
+
+const texUnit = 3;
+gl.activeTexture(gl.TEXTURE0 + texUnit);
+gl.bindTexture(gl.TEXTURE_2D, checkerTexture);
+gl.uniform1i(diffuseLoc, texUnit);
+
+gl.uniform3fv(lightDirLoc, m4.normalize([1, 5, 3]));
+
+const projection = m4.perspective(
+  60 * Math.PI / 180,  // fov
+  gl.canvas.clientWidth / gl.canvas.clientHeight,  // aspect
+  0.1,  // near
+  10,   // far
+);
+gl.uniformMatrix4fv(projectionLoc, false, projection);
+
+let modelView = m4.identity();
+modelView = m4.translate(modelView, 0, 0, -4);
+modelView = m4.xRotate(modelView, 0.5);
+modelView = m4.yRotate(modelView, 0.5);
+
+gl.uniformMatrix4fv(modelViewLoc, false, modelView);
+
+gl.drawElements(
+    gl.TRIANGLES,
+    36,                // num vertices to process
+    gl.UNSIGNED_SHORT, // type of indices
+    0,                 // offset on bytes to indices
+);
+</script>
+<script>
+/* eslint strict: "off" */
+//'use strict';
+
+hljs.initHighlightingOnLoad();
 
 const styleToText = styles => Object.entries(styles).map(([key, value]) => `${key}:${value};`).join('');
 const hsl = (h, s, l) => `hsl(${h * 360},${s * 100 | 0}%,${l * 100 | 0}%)`;
@@ -461,15 +651,17 @@ function addElem(tag, parent, attrs = {}) {
   return elem;
 }
 
-function toggleExpander(e) {
-  e.target.parentElement.classList.toggle('open');
-}
-
 let dragTarget;
 let dragMouseStartX;
 let dragMouseStartY;
 let dragTargetStartX;
 let dragTargetStartY;
+
+function toggleExpander(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.target.parentElement.classList.toggle('open');
+}
 
 function dragStart(e) {
   e.preventDefault();
@@ -517,8 +709,14 @@ function dragStop(e) {
   window.removeEventListener('mouseup', dragStop);
 }
 
-function makeDraggable(elem) {
-  const div = addElem('div', elem.parentElement, {className: 'draggable'});
+function makeDraggable(elem, x = 0, y = 0) {
+  const div = addElem('div', elem.parentElement, {
+    className: 'draggable',
+    style: {
+      left: px(x),
+      top: px(y),
+    },
+  });
   elem.parentElement.removeChild(elem);
   div.appendChild(elem);
   div.addEventListener('mousedown', dragStart, {passive: false});
@@ -530,6 +728,7 @@ function createExpander(parent, title, attrs = {}) {
     textContent: title,
   });
   titleElem.addEventListener('click', toggleExpander);
+  titleElem.addEventListener('mousedown', (e) => e.stopPropagation());
   return outer;
 }
 
@@ -546,62 +745,6 @@ function createStateTable(states, parent, title) {
   }
   return expander;
 }
-
-function createShader(gl, type, glslString) {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, glslString);
-  gl.compileShader(shader);
-  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === 0) {
-    throw new Error(gl.getShaderInfoLog(shader));
-  }
-  return shader;
-}
-
-function createProgram(gl, vsGLSL, fsGLSL) {
-  const program = gl.createProgram();
-  gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, vsGLSL));
-  gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, fsGLSL));
-  gl.linkProgram(program);
-  if (gl.getProgramParameter(program, gl.LINK_STATUS) === 0) {
-    throw new Error(gl.getProgramInfoLog(program));
-  }
-  return program;
-}
-
-const vs = `
-attribute vec4 position;
-attribute vec3 normal;
-attribute vec2 texcoord;
-
-uniform mat4 projection;
-uniform mat4 modelView;
-
-varying vec3 v_normal;
-varying vec2 v_texcoord;
-
-void main() {
-    gl_Position = projection * modelView * position;
-    v_normal = mat3(modelView) * normal;
-    v_texcoord = texcoord;
-}
-`;
-
-const fs = `
-precision highp float;
-
-varying vec3 v_normal;
-varying vec2 v_texcoord;
-
-uniform sampler2D diffuse;
-uniform vec3 lightDir;
-
-void main() {
-    vec3 normal = normalize(v_normal);
-    float light = dot(normal, lightDir) * 0.5 + 0.5;
-    vec4 color = texture2D(diffuse, v_texcoord);
-    gl_FragColor = vec4(color.rgb * light, color.a);
-}
-`;
 
 function isBuiltIn(info) {
   const name = info.name;
@@ -785,6 +928,23 @@ function createTable(parent, headings) {
   return addElem('tbody', table);
 }
 
+function formatUniformValue(v) {
+  if (v.buffer && v.buffer instanceof ArrayBuffer) {
+    v = Array.from(v);
+  }
+  if (Array.isArray(v)) {
+    if (v.length === 16) {
+      const s = [];
+      v.forEach((v, ndx) => {
+        s.push(`${v.toFixed(3)}${ndx !== v.length - 1 ? ',' : ''}${ndx % 4 === 3 ? '\n' : ''}`);
+      });
+      return s.join('');
+    }
+    return v.map(v => v.toFixed(3)).join(', ');
+  }
+  return typeof v === 'number' ? v.toFixed(3) : v;
+}
+
 function createProgramUniforms(parent, gl, program) {
   const tbody = createTable(parent, ['name', 'loc', 'value']);
   const uniformSetters = { };
@@ -813,7 +973,7 @@ function createProgramUniforms(parent, gl, program) {
       },
     });
     addElem('td', tr, {
-      textContent: gl.getUniform(program, loc).toString(),
+      textContent: formatUniformValue(gl.getUniform(program, loc)),
       dataset: {help},
     });
   }
@@ -825,12 +985,22 @@ function createShaderDisplay(parent, type, glsl) {
   expander.querySelector('.lang-glsl').textContent = glsl;
 }
 
-function createProgramDisplay(parent, gl, vsGLSL, fsGLSL) {
-  const prg = createProgram(gl, vsGLSL, fsGLSL);
+function createProgramDisplay(parent, gl, program) {
   const prgElem = createTemplate(parent, '#program-template');
 
-  createShaderDisplay(prgElem, 'vertex', vsGLSL);
-  createShaderDisplay(prgElem, 'fragment', fsGLSL);
+  const shaders = gl.getAttachedShaders(program);
+
+  // sort so VERTEX_SHADER is first.
+  shaders.sort((a, b) => {
+    const aType = gl.getShaderParameter(a, gl.SHADER_TYPE);
+    const bType = gl.getShaderParameter(b, gl.SHADER_TYPE);
+    return aType < bType;
+  });
+
+  const types = ['vertex', 'fragment'];
+  types.forEach((type, ndx) => {
+    createShaderDisplay(prgElem, type, gl.getShaderSource(shaders[ndx]));
+  });
 
   const attribExpander = createExpander(prgElem, 'attribute info', {
     dataset: {
@@ -845,6 +1015,9 @@ function createProgramDisplay(parent, gl, vsGLSL, fsGLSL) {
 
   createProgramAttributes(attribExpander, gl, prg);
   createProgramUniforms(uniformExpander, gl, prg);
+
+  expand(attribExpander);
+  expand(uniformExpander);
 
   makeDraggable(prgElem);
   return prgElem;
@@ -1740,25 +1913,68 @@ function createTextureUnits(parent, maxUnits = 8) {
   return expander;
 }
 
+function expand(elem) {
+  if (elem.classList.contains('expander')) {
+    elem.classList.add('open');
+  } else {
+    elem.querySelector('.expander').classList.add('open');
+  }
+}
+
+const diagramElem = document.querySelector('#diagram');
+const codeElem = document.querySelector('#code');
+
 const globalState = document.querySelector('#global-state');
-createTextureUnits(globalState, 8);
-createStateTable(miscState, globalState, 'misc state');
-createStateTable(clearState, globalState, 'clear state');
-createStateTable(depthState, globalState, 'depth state');
+expand(createTextureUnits(globalState, 8));
+expand(createStateTable(clearState, globalState, 'clear state'));
+expand(createStateTable(depthState, globalState, 'depth state'));
 createStateTable(blendState, globalState, 'blend state');
+createStateTable(miscState, globalState, 'misc state');
 createStateTable(stencilState, globalState, 'stencil state');
 createStateTable(polygonState, globalState, 'polygon state');
-makeDraggable(globalState);
+makeDraggable(globalState, 10, 10);
+makeDraggable(document.querySelector('canvas'));
 
-const tx = createTextureDisplay(document.body, '/webgl/resources/f-texture.png');
 
-createVertexArrayDisplay(document.body, [
+const js = document.querySelector('#js').text;
+const lines = [...js.matchAll(/[^`;]*(?:`[^`]*?`)?[^`;]*;?;\n/g)].map(m => m[0]);
+for (const line of lines) {
+  eval(line.replace(/const |let /g, ''));
+  const pre = document.createElement('pre');
+  pre.textContent = line;
+  codeElem.appendChild(pre);
+}
+
+function createShader(gl, type, glslString) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, glslString);
+  gl.compileShader(shader);
+  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === 0) {
+    throw new Error(gl.getShaderInfoLog(shader));
+  }
+  return shader;
+}
+
+function createProgram(gl, vsGLSL, fsGLSL) {
+  const program = gl.createProgram();
+  gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, vsGLSL));
+  gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, fsGLSL));
+  gl.linkProgram(program);
+  if (gl.getProgramParameter(program, gl.LINK_STATUS) === 0) {
+    throw new Error(gl.getProgramInfoLog(program));
+  }
+  return program;
+}
+
+const tx = createTextureDisplay(diagramElem, '/webgl/resources/f-texture.png');
+
+createVertexArrayDisplay(diagramElem, [
   {size: 2, type: 'FLOAT', buffer: 'texcoordBuffer',},
   {size: 3, type: 'FLOAT', buffer: 'normalBuffer',},
   {size: 3, type: 'FLOAT', buffer: 'positionBuffer',},
 ]);
 
-createProgramDisplay(document.body, gl, vs, fs);
+createProgramDisplay(diagramElem, gl, prg);
 
 var divA       = globalState;
 var divB       = tx;
