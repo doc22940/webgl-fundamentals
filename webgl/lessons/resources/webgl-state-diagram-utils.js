@@ -21,8 +21,6 @@ const formatX2 = v => formatX(v, 2);
 const formatEnum = v => glEnumToString(gl, v);
 const formatEnumZero = v => v ? v === 1 ? 'ONE' : glEnumToString(gl, v) : 'ZERO';
 const formatBoolean = v => v.toString();
-const formatWebGLObject = v => v ? webglObjects.get(v).name : 'null';
-const formatWebGLObjectOrDefaultVAO = v => v ? webglObjects.get(v).name : 'null (default VAO)';
 
 function flash(elem) {
   elem.classList.remove('flash');
@@ -128,8 +126,6 @@ window.stateDiagramUtils = {
   formatEnum,
   formatEnumZero,
   formatBoolean,
-  formatWebGLObject,
-  formatWebGLObjectOrDefaultVAO,
   formatUniformValue,
   createTemplate,
   updateElem,
