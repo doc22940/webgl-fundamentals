@@ -1,7 +1,7 @@
 /* eslint strict: "off" */
 /* eslint no-undef: "error" */
 
-/* global twgl, hljs, showdown, gl */
+/* global hljs, showdown, gl */
 
 //'use strict';
 
@@ -9,6 +9,8 @@
 // * connect arrows
 // * position things
 // * texture mips
+
+import * as twgl from '/3rdparty/twgl-full.module.js';
 import {
   px,
   formatBoolean,
@@ -38,7 +40,7 @@ function main() {
 
   hljs.initHighlightingOnLoad();
 
-  gl = document.querySelector('canvas').getContext('webgl');
+  gl = document.querySelector('canvas').getContext('webgl');  /* eslint-disable-line */
   twgl.addExtensionsToContext(gl);
 
   const diagramElem = document.querySelector('#diagram');

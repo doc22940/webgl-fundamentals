@@ -1,7 +1,7 @@
 /* eslint strict: "off" */
 /* eslint no-undef: "error" */
 
-/* global twgl, gl */
+/* global gl */
 
 //'use strict';
 
@@ -9,6 +9,7 @@
 // * connect arrows
 // * position things
 // * texture mips
+import * as twgl from '/3rdparty/twgl-full.module.js';
 import {
   formatG,
   formatX2,
