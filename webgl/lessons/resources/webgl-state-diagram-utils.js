@@ -22,10 +22,12 @@ function flash(elem) {
 }
 
 function updateElem(elem, newValue) {
-  if (elem.textContent !== newValue) {
+  const needUpdate = elem.textContent !== newValue;
+  if (needUpdate) {
     elem.textContent = newValue;
     flash(elem);
   }
+  return needUpdate;
 }
 
 function helpToMarkdown(s) {

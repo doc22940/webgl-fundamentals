@@ -88,7 +88,7 @@ function addGroup(parent, transform) {
 function addArrow(parent) {
   const group = addSVG('g', parent, {
     fill: 'none',
-    stroke: 'black',
+    stroke: 'red',
     'stroke-width': '2',
     'marker-end': 'url(#arrowhead)',
   });
@@ -102,7 +102,7 @@ const p = ({x, y}) => `${x},${y}`;
 
 const arrowCPOff = 50;
 const arrowStartOff = 1;
-const arrowEndOff = 4;
+const arrowEndOff = 12;
 
 function updateArrow(arrowPath, divA, divB) {
   const a = getPageRelativeRect(divA);

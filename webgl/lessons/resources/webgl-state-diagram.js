@@ -12,6 +12,8 @@
 // * breakpoints
 // * step to
 // * restart
+// * add help for each line
+// * continue flashing
 
 import * as twgl from '/3rdparty/twgl-full.module.js';
 import {
@@ -741,6 +743,7 @@ function main() {
       formatWebGLObject,  // buffer
       formatUniformValue, // divisor
     ];
+    const arrows = [];
 
     const updateAttributes = () => {
       for (let i = 0; i < maxAttribs; ++i) {
@@ -764,7 +767,21 @@ function main() {
         data.forEach((value, cellNdx) => {
           const cell = row.cells[cellNdx];
           const newValue = formatters[cellNdx](value);
-          updateElem(cell, newValue);
+          if (updateElem(cell, newValue)) {
+            if (cellNdx === 7) {  // FIXME
+              const oldArrow = arrows[i];
+              if (oldArrow) {
+                arrowManager.remove(oldArrow);
+                arrows[i] = null;
+              }
+              if (value) {
+                const targetInfo = getWebGLObjectInfo(value);
+                if (!targetInfo.deleted) {
+                  arrows[i] = arrowManager.add(cell, targetInfo.ui.elem.querySelector('.name'));
+                }
+              }
+            }
+          }
         });
       }
     };
@@ -777,6 +794,7 @@ function main() {
     };
 
     const stateTable = createStateTable(vertexArrayState, vaElem.querySelector('.state-table'), 'state', vaQueryFn);
+    expand(stateTable);
     makeDraggable(vaElem);
 
     return {
@@ -813,7 +831,6 @@ function main() {
   function createTextureDisplay(parent, name, texture, imgHref) {
     const texElem = createTemplate(parent, '#texture-template');
     setName(texElem, name);
-
 
     const mipsExpander = createExpander(texElem, 'mips');
     const mipsOuterElem = addElem('div', mipsExpander);
@@ -888,7 +905,10 @@ function main() {
   function createTextureUnits(parent, maxUnits = 8) {
     const expander = createExpander(parent, 'Texture Units');
     const tbody = createTable(expander, ['2D', 'CUBE_MAP']);
+    const arrows = [];
+ 
     for (let i = 0; i < maxUnits; ++i) {
+      arrows.push({});
       const tr = addElem('tr', tbody);
       addElem('td', tr, {
         textContent: 'null',
@@ -916,14 +936,28 @@ function main() {
           `),
         },
       });
-    }
+    } 
 
     const targets = [gl.TEXTURE_BINDING_2D, gl.TEXTURE_BINDING_CUBE_MAP];
     const updateCurrentTextureUnit = () => {
       const unit = gl.getParameter(gl.ACTIVE_TEXTURE) - gl.TEXTURE0;
       const row = tbody.rows[unit];
       targets.forEach((target, colNdx) => {
-        updateElem(row.cells[colNdx], formatWebGLObject(gl.getParameter(target)));
+        const cell = row.cells[colNdx];
+        const texture = gl.getParameter(target);
+        if (updateElem(cell, formatWebGLObject(texture))) {
+          const oldArrow = arrows[unit][target];
+          if (oldArrow) {
+            arrowManager.remove(oldArrow);
+            arrows[unit][target] = null;
+          }
+          if (texture) {
+            const targetInfo = getWebGLObjectInfo(texture);
+            if (!targetInfo.deleted) {
+              arrows[unit][target] = arrowManager.add(cell, targetInfo.ui.elem.querySelector('.name'));
+            }
+          }
+        }
       });
     };
 
