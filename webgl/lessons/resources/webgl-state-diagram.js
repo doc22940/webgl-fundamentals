@@ -32,6 +32,7 @@ function main() {
 
   const diagramElem = document.querySelector('#diagram');
   const codeElem = document.querySelector('#code');
+  const stepper = new Stepper();
 
   const webglObjects = new Map();
   const formatWebGLObject = v => v ? webglObjects.get(v).name : 'null';
@@ -1781,10 +1782,6 @@ function main() {
   makeDraggable(document.querySelector('#canvas'), -10, 10);
 
 
-  let currentLine;
-  let unknownId = 0;
-  const nameRE = /\s+(\w+)\s*=\s*\w+\.create\w+/;
-
   function wrapFn(fnName, fn) {
     gl[fnName] = function(origFn) {
       if (!origFn) {
@@ -1799,8 +1796,7 @@ function main() {
   function wrapCreationFn(fnName, uiFactory) {
     wrapFn(fnName, function(origFn, ...args) {
       const webglObject = origFn.call(this, ...args);
-      const m = nameRE.exec(currentLine.trim());
-      const name = m ? m[1] : `-unknown${++unknownId}-`;
+      const name = stepper.guessIdentifierOfCurrentLine();
       webglObjects.set(webglObject, {
         name,
         ui: uiFactory(name, webglObject),
@@ -1941,59 +1937,6 @@ function main() {
     ui.updateAttributes();
   });
 
-  const js = document.querySelector('#js').text;
-  const lines = [...js.matchAll(/[^`;]*(?:`[^`]*?`)?[^`;]*;?;\n/g)].map(m => {
-    let code = m[0];
-    if (code.startsWith('\n')) {
-      code = code.substr(1);
-      addElem('div', codeElem, {textContent: ' ', className: 'hljs'});
-    }
-    const elem = addElem('div', codeElem);
-    addElem('div', elem, {className: 'line-marker'});
-    hljs.highlightBlock(addElem('pre', elem, {textContent: code}));
-    return {
-      code,
-      elem,
-    };
-  });
-
-  let currentLineNo = 0;
-
-  const stepElem = document.querySelector('#step');
-  stepElem.addEventListener('click', step);
-  const runElem = document.querySelector('#run');
-  runElem.addEventListener('click', run);
-
-  function step() {
-    lines[currentLineNo].elem.classList.remove('current-line');
-    execute(lines[currentLineNo++].code);
-    highlightCurrentLine();
-  }
-
-  function highlightCurrentLine() {
-    if (currentLineNo < lines.length) {
-      const {elem} = lines[currentLineNo];
-      elem.classList.add('current-line');
-      elem.scrollIntoView({
-        block: 'nearest',
-        inline: 'nearest',
-      });
-    }
-  }
-  highlightCurrentLine();
-
-  function execute(code) {
-    currentLine = code;
-    eval(code.replace(/const |let /g, ''));  // eslint-disable-line no-eval
-  }
-
-  async function run() {
-    while (currentLineNo < lines.length) {
-      step();
-      await wait(50);
-    }
-  }
-
   /*
   var divA       = globalState;
   var divB       = tx;
@@ -2048,5 +1991,6 @@ function main() {
 
   //drawConnector();
   */
+  stepper.init(codeElem, document.querySelector('#js').text);
 }
 main();
