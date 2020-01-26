@@ -243,9 +243,6 @@ if (!gl.getProgramParameter(prg, gl.LINK_STATUS)) {
   throw new Error(gl.getProgramParameter(prg))
 };
 
-gl.deleteShader(vertexShader);
-gl.deleteShader(fragmentShader);
-
 const positionLoc = gl.getAttribLocation(prg, 'position');
 const normalLoc = gl.getAttribLocation(prg, 'normal');
 const texcoordLoc = gl.getAttribLocation(prg, 'texcoord');
