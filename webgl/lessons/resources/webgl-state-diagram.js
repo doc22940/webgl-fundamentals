@@ -1,9 +1,48 @@
 /* eslint strict: "off" */
 //'use strict';
 
+// TODO:
+// * connect arrows
+// * position things
+// * texture mips
+// * fix attrib css
+
+
 hljs.initHighlightingOnLoad();
 
+var gl = document.querySelector('canvas').getContext('webgl');
+twgl.addExtensionsToContext(gl);
+
+const webglObjects = new Map();
+
 const px = (v) => `${v}px`;
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const formatG = v => typeof v === 'number' ? v.toFixed(3).replace(/\.?0+$/, '') : v;
+function formatX(v, n = 0) {
+  const s = v.toString(16);
+  return `0x${s.padStart(n, '0').substr(0, 2)}`;
+}
+const formatX2 = v => formatX(v, 2);
+const formatEnum = v => glEnumToString(gl, v);
+const formatEnumZero = v => v ? v === 1 ? 'ONE' : glEnumToString(gl, v) : 'ZERO';
+const formatBoolean = v => v.toString();
+const formatWebGLObject = v => v ? webglObjects.get(v).name : 'null';
+const formatWebGLObjectOrDefaultVAO = v => v ? webglObjects.get(v).name : 'null (default VAO)';
+
+function flash(elem) {
+  elem.classList.remove('flash');
+  setTimeout(() => {
+    elem.classList.add('flash');
+  }, 1);
+}
+
+function updateElem(elem, newValue) {
+  if (elem.textContent !== newValue) {
+    elem.textContent = newValue;
+    flash(elem);
+  }
+}
 
 function helpToMarkdown(s) {
   s = s.replace(/---/g, '```')
@@ -62,7 +101,8 @@ const webglFuncs = `
 const depthState = [
   {
     pname: 'DEPTH_TEST',
-    value: 'TRUE',
+    setter: ['enable', 'disable'],
+    formatter: formatUniformValue,
     help: `
       to enable
 
@@ -79,7 +119,8 @@ const depthState = [
   },
   {
     pname: 'DEPTH_FUNC',
-    value: 'LESS',
+    setter: 'depthFunc',
+    formatter: formatEnum,
     help: `
       ---js
       gl.depthFunc(func);
@@ -91,7 +132,8 @@ const depthState = [
   },
   {
     pname: 'DEPTH_RANGE',
-    value: '0, 1',
+    setter: 'depthRange',
+    formatter: formatUniformValue,
     help: `
       specifies how to convert from clip space to a depth value
 
@@ -102,7 +144,8 @@ const depthState = [
   },
   {
     pname: 'DEPTH_WRITEMASK',
-    value: 'true',
+    setter: 'depthMask',
+    formatter: formatBoolean,
     help: `
       sets whether or not to write to the depth buffer
 
@@ -219,18 +262,46 @@ function createExpander(parent, title, attrs = {}) {
   return outer;
 }
 
-function createStateTable(states, parent, title) {
+function glEnumToString(gl, value) {
+  const keys = [];
+  for (const key in gl) {
+    if (gl[key] === value) {
+      keys.push(key);
+    }
+  }
+  return keys.length ? keys.join(' | ') : `0x${value.toString(16)}`;
+}
+
+function createStateTable(states, parent, title, queryFn, update = true) {
   const expander = createExpander(parent, title);
   const table = addElem('table', expander);
   const tbody = addElem('tbody', table);
   for (const state of states) {
-    const {pname, value, help} = state;
+    const {pname, help} = state;
     const tr = addElem('tr', tbody);
     tr.dataset.help = helpToMarkdown(help);
     addElem('td', tr, {textContent: pname});
-    addElem('td', tr, {textContent: value});
+    addElem('td', tr);
+  }
+  if (update) {
+    updateStateTable(states, expander, queryFn, true);
   }
   return expander;
+}
+
+function updateStateTable(states, parent, queryFn, initial) {
+  const tbody = parent.querySelector('tbody');
+  // NOTE: Assumption that states array is parallel to table rows
+  states.forEach((state, rowNdx) => {
+    const {formatter} = state;
+    const value = formatter(queryFn(state));
+    const row = tbody.rows[rowNdx];
+    const isNew = row.cells[1].textContent !== value;
+    row.cells[1].textContent = value;
+    if (!initial && isNew) {
+      flash(row);
+    }
+  });
 }
 
 function isBuiltIn(info) {
@@ -241,37 +312,49 @@ function isBuiltIn(info) {
 function createProgramAttributes(parent, gl, program) {
   const tbody = createTable(parent, ['name', 'location']);
 
-  const numAttribs = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
-  for (let ii = 0; ii < numAttribs; ++ii) {
-    const attribInfo = gl.getActiveAttrib(program, ii);
-    if (isBuiltIn(attribInfo)) {
-        continue;
+  const scan = () => {
+    tbody.innerHTML = '';
+    flash(tbody);
+
+    const numAttribs = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
+    for (let ii = 0; ii < numAttribs; ++ii) {
+      const attribInfo = gl.getActiveAttrib(program, ii);
+      if (isBuiltIn(attribInfo)) {
+          continue;
+      }
+      const index = gl.getAttribLocation(program, attribInfo.name);
+      const tr = addElem('tr', tbody);
+      const help = helpToMarkdown(`
+        get attribute location with
+
+        ---js
+        const loc = gl.getAttribLocation(program, '${attribInfo.name}');
+        ---
+        
+        attribute locations are chosen by WebGL. You can choose locations
+        by calling.
+
+        ---js
+        gl.bindAttribLocation(program, desiredLocation, '${attribInfo.name}');
+        ---
+
+        **BEFORE** calling
+        
+        ---js
+        gl.linkProgram(program);
+        ---
+      `);
+      addElem('td', tr, {textContent: attribInfo.name, dataset: {help}});
+      addElem('td', tr, {textContent: index, dataset: {help}});
     }
-    const index = gl.getAttribLocation(program, attribInfo.name);
-    const tr = addElem('tr', tbody);
-    const help = helpToMarkdown(`
-      get attribute location with
+  };
 
-      ---js
-      const loc = gl.getAttribLocation(program, '${attribInfo.name}');
-      ---
-      
-      attribute locations are chosen by WebGL. You can choose locations
-      by calling.
+  scan();
 
-      ---js
-      gl.bindAttribLocation(program, desiredLocation, '${attribInfo.name}');
-      ---
-
-      **BEFORE** calling
-      
-      ---js
-      gl.linkProgram(program);
-      ---
-    `);
-    addElem('td', tr, {textContent: attribInfo.name, dataset: {help}});
-    addElem('td', tr, {textContent: index, dataset: {help}});
-  }
+  return {
+    elem: tbody,
+    scan,
+  };
 }
 
 const getUniformInfo = (function() {
@@ -327,9 +410,9 @@ const typeMap = {};
 /**
  * Returns the corresponding bind point for a given sampler type
  */
-function getBindPointForSamplerType(gl, type) {
-  return typeMap[type].bindPoint;
-}
+//function getBindPointForSamplerType(gl, type) {
+//  return typeMap[type].bindPoint;
+//}
 
 // This kind of sucks! If you could compose functions as in `var fn = gl[name];`
 // this code could be a lot smaller but that is sadly really slow (T_T)
@@ -415,21 +498,24 @@ function createTable(parent, headings) {
   return addElem('tbody', table);
 }
 
-function formatG(v) {
-  return v.toFixed(3).replace(/\.?0+$/, '');
-}
-
 function formatUniformValue(v) {
   if (v.buffer && v.buffer instanceof ArrayBuffer) {
     v = Array.from(v);
   }
   if (Array.isArray(v)) {
-    if (v.length === 16) {
-      const s = [];
-      v.forEach((v, ndx) => {
-        s.push(`${formatG(v)}${ndx !== v.length - 1 ? ',' : ''}${ndx % 4 === 3 ? '\n' : ''}`);
-      });
-      return s.join('');
+    if (v.length > 4) {
+      // should really look at type of uniform
+      const mod = v.length % 3 === 0 ? 3 : 4;
+      const rows = [];
+      for (let i = 0; i < v.length; i += mod) {
+        const row = [];
+        const end = Math.min(i + mod, v.length);
+        for (let j = i; j < end; ++j) {
+          row.push(formatG(v[j]));
+        }
+        rows.push(row.join(', '));
+      }
+      return rows.join(',\n');
     }
     return v.map(formatG).join(', ');
   }
@@ -437,35 +523,54 @@ function formatUniformValue(v) {
 }
 
 function createProgramUniforms(parent, gl, program) {
-  const tbody = createTable(parent, ['name', 'loc', 'value']);
-  const numUniforms = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+  const tbody = createTable(parent, ['name', 'value']);
 
-  for (let ii = 0; ii < numUniforms; ++ii) {
-    const uniformInfo = gl.getActiveUniform(program, ii);
-    if (isBuiltIn(uniformInfo)) {
-        continue;
-    }
-    let name = uniformInfo.name;
-    // remove the array suffix.
-    if (name.substr(-3) === "[0]") {
-      name = name.substr(0, name.length - 3);
-    }
-    const loc = gl.getUniformLocation(program, name);
-    const info = getUniformInfo(uniformInfo.type);
-    const help = helpToMarkdown(`---js\ngl.useProgram(program); // set current program\n${info.setter}\n---`);
+  let locations = [];
+  let numUniforms;
 
-    const tr = addElem('tr', tbody);
-    addElem('td', tr, {textContent: name, dataset: {help}});
-    addElem('td', tr, {
-      textContent: '?',
-      dataset: {
-        help: helpToMarkdown(`---js\nconst loc = gl.getUniformLocation(program, '${name}');\n---`),
-      },
+  const update = () => {
+    locations.forEach((location, ndx) => {
+      const cell = tbody.rows[ndx].cells[1];
+      updateElem(cell, formatUniformValue(gl.getUniform(program, location)));
     });
-    addElem('td', tr, {
-      textContent: formatUniformValue(gl.getUniform(program, loc)),
-      dataset: {help},
-    });
+  };
+
+  const scan = () => {
+    locations = [];
+    numUniforms = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+    tbody.innerHTML = '';
+    flash(tbody);
+
+    for (let ii = 0; ii < numUniforms; ++ii) {
+      const uniformInfo = gl.getActiveUniform(program, ii);
+      if (isBuiltIn(uniformInfo)) {
+          continue;
+      }
+      let name = uniformInfo.name;
+      // remove the array suffix.
+      if (name.substr(-3) === "[0]") {
+        name = name.substr(0, name.length - 3);
+      }
+      locations.push(gl.getUniformLocation(program, name));
+      const info = getUniformInfo(uniformInfo.type);
+      const help = helpToMarkdown(`---js\nconst location = gl.getUniformLocation(\n    program,\n    '${name}');\ngl.useProgram(program); // set current program\n${info.setter}\n---`);
+
+      const tr = addElem('tr', tbody);
+      addElem('td', tr, {textContent: name, dataset: {help}});
+      addElem('td', tr, {
+        dataset: {help},
+      });
+    }
+    update();
+  };
+
+  scan();
+  update();
+
+  return {
+    elem: tbody,
+    scan,
+    update,
   }
 }
 
@@ -477,7 +582,7 @@ function setName(elem, name) {
 const shaderState = [
  {
     pname: 'COMPILE_STATUS',
-    value: 'false',
+    formatter: formatUniformValue,
     help: `
     Whether or not the last call to --gl.compileShader-- was successful.
     `,
@@ -490,27 +595,40 @@ function createShaderDisplay(parent, name, shader) {
   const shElem = createTemplate(parent, `#${type}-shader-template`);
   setName(shElem, name);
 
-  expand(createStateTable(shaderState, shElem, 'state'));
+  const sourceExpander = createExpander(shElem, 'source');
+  const preElem = addElem('pre', sourceExpander);
+
+  const updateSource = () => {
+    preElem.innerHTML = '';
+    const codeElem = addElem('code', preElem, {className: 'lang-glsl'});
+    codeElem.textContent = gl.getShaderSource(shader);
+    hljs.highlightBlock(codeElem);
+    expand(sourceExpander);
+  };
+
+  const queryFn = state => {
+    const {pname} = state;
+    const value = gl.getShaderParameter(shader, gl[pname]);
+    return value;
+  };
+
+  const stateTable = createStateTable(shaderState, shElem, 'state', queryFn);
+  expand(stateTable);
   makeDraggable(shElem);
 
-  return shElem;
+  return {
+    elem: shElem,
+    updateSource,
+    updateState: () => {
+      updateStateTable(shaderState, stateTable, queryFn);
+    },
+  };
 }
 
 const programState = [
  {
-   pname: `ATTACHED_SHADERS`,
-   value: `[]`,
-   help: `
-   shaders attached with
-
-   ---js
-   gl.attachShader(program, shader);
-   ---
-   `,
- },
- {
     pname: 'LINK_STATUS',
-    value: 'false',
+    formatter: formatUniformValue,
     help: `
     Whether or not the last call to --gl.linkProgram-- was successful.
     `,
@@ -521,25 +639,35 @@ function createProgramDisplay(parent, name, program) {
   const prgElem = createTemplate(parent, '#program-template');
   setName(prgElem, name);
 
-  expand(createStateTable(programState, prgElem, 'state'));
-  makeDraggable(prgElem);
-  return prgElem;
-}
+  const shaderExpander = createExpander(prgElem, 'attached shaders');
+  const shadersTbody = createTable(shaderExpander, []);
 
-function foob() {
-  const shaders = gl.getAttachedShaders(program);
+  let oldShaders = [];
+  let newShaders;
 
-  // sort so VERTEX_SHADER is first.
-  shaders.sort((a, b) => {
-    const aType = gl.getShaderParameter(a, gl.SHADER_TYPE);
-    const bType = gl.getShaderParameter(b, gl.SHADER_TYPE);
-    return aType < bType;
-  });
+  const updateAttachedShaders = () => {
+    expand(shaderExpander);
+    shadersTbody.innerHTML = '';
 
-  const types = ['vertex', 'fragment'];
-  types.forEach((type, ndx) => {
-    createShaderDisplay(prgElem, type, gl.getShaderSource(shaders[ndx]));
-  });
+    newShaders = gl.getAttachedShaders(program);
+
+    // sort so VERTEX_SHADER is first.
+    newShaders.sort((a, b) => {
+      const aType = gl.getShaderParameter(a, gl.SHADER_TYPE);
+      const bType = gl.getShaderParameter(b, gl.SHADER_TYPE);
+      return aType < bType;
+    });
+
+    for (const shader of newShaders) {
+      const tr = addElem('tr', shadersTbody);
+      addElem('td', tr, {
+          className: oldShaders.indexOf(shader) >= 0 ? '' : 'flash',
+          textContent: formatWebGLObject(shader),
+      });
+    }
+
+    oldShaders = newShaders;
+  };
 
   const attribExpander = createExpander(prgElem, 'attribute info', {
     dataset: {
@@ -552,14 +680,34 @@ function foob() {
     },
   });
 
-  createProgramAttributes(attribExpander, gl, prg);
-  createProgramUniforms(uniformExpander, gl, prg);
 
   expand(attribExpander);
   expand(uniformExpander);
 
+  const attribUI = createProgramAttributes(attribExpander, gl, program);
+  const uniformUI = createProgramUniforms(uniformExpander, gl, program);
+
+  const queryFn = state => {
+    const {pname} = state;
+    const value = gl.getProgramParameter(program, gl[pname]);
+    return value;
+  };
+
+  const stateTable = createStateTable(programState, prgElem, 'state', queryFn);
+  expand(stateTable);
+
   makeDraggable(prgElem);
-  return prgElem;
+
+  return {
+    elem: prgElem,
+    updateAttachedShaders,
+    updateState: () => {
+      updateStateTable(programState, stateTable, queryFn);
+    },
+    scanAttributes: attribUI.scan,
+    scanUniforms: uniformUI.scan,
+    updateUniforms: uniformUI.update,
+  };
 }
 
 function createTemplate(parent, selector) {
@@ -573,25 +721,24 @@ function createTemplate(parent, selector) {
   return elem;
 }
 
-function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
+const maxAttribs = 8;
+function createVertexArrayDisplay(parent, name, /* webglObject */) {
   const vaElem = createTemplate(parent, '#vertex-array-template');
+  setName(vaElem, name);
   const vaoNote = helpToMarkdown(`
     note: the current vertex array can be set with the
     [--OES_vertex_array_object--](https://www.khronos.org/registry/webgl/extensions/OES_vertex_array_object/)
     extension. Otherwise there is only the 1 default vertex array in WebGL 1.0.
   `);
   const attrExpander = createExpander(vaElem.querySelector('.state-table'), 'attributes');
+  expand(attrExpander);
   const table = createTemplate(attrExpander, '#vertex-attributes-template');
   const attrsElem = table.querySelector('tbody');
 
   for (let i = 0; i < maxAttribs; ++i) {
-    const {size = 1, type = 'FLOAT', normalize = 'false', stride = '0', offset = '0', buffer = 'null', divisor = '0'} = attribs[i] || {};
-    const enabled = i < attribs.length;
-    const enabledClassName = enabled ? 'attrib-enabled' : 'attrib-disabled';
-    const disabledClassName = enabled ? 'attrib-disabled' : 'attrib-enabled';
     const tr = addElem('tr', attrsElem);
+
     addElem('td', tr, {
-      textContent: enabled,
       dataset: {
         help: helpToMarkdown(`
         * --true-- this attribute uses data from a buffer.
@@ -607,8 +754,7 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
       },
     });
     addElem('td', tr, {
-      textContent: '0,0,0,1',
-      className: disabledClassName,
+      className: 'used-when-disabled',
       dataset: {
         help: helpToMarkdown(`
         The value used if this attribute is disabled.
@@ -622,8 +768,7 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
       },
     });
     addElem('td', tr, {
-      textContent: size,
-      className: enabledClassName,
+      className: 'used-when-enabled',
       dataset: {
         help: helpToMarkdown(`
         Number of values to pull from buffer per vertex shader iteration
@@ -637,8 +782,7 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
       },
     });
     addElem('td', tr, {
-      textContent: type,
-      className: enabledClassName,
+      className: 'used-when-enabled',
       dataset: {
         help: helpToMarkdown(`
         The type of the data to read from the buffer. 
@@ -654,8 +798,7 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
       },
     });
     addElem('td', tr, {
-      textContent: normalize,
-      className: enabledClassName,
+      className: 'used-when-enabled',
       dataset: {
         help: helpToMarkdown(`
         true = use the value as is
@@ -671,8 +814,7 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
       },
     });
     addElem('td', tr, {
-      textContent: stride,
-      className: enabledClassName,
+      className: 'used-when-enabled',
       dataset: {
         help: helpToMarkdown(`
         how many bytes to advance in the buffer per vertex shader iteration
@@ -689,8 +831,7 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
       },
     });
     addElem('td', tr, {
-      textContent: offset,
-      className: enabledClassName,
+      className: 'used-when-enabled',
       dataset: {
         help: helpToMarkdown(`
         The offset in bytes where the data for this attribute starts in the buffer.
@@ -704,8 +845,7 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
       },
     });
     addElem('td', tr, {
-      textContent: buffer,
-      className: enabledClassName,
+      className: 'used-when-enabled',
       dataset: {
         help: helpToMarkdown(`
         The buffer this attribute will pull data from. This gets set
@@ -726,8 +866,7 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
       },
     });
     addElem('td', tr, {
-      textContent: divisor,
-      className: enabledClassName,
+      className: 'used-when-enabled',
       dataset: {
         help: helpToMarkdown(`
         Used with the [ANGLE_instanced_arrays extension](https://www.khronos.org/registry/webgl/extensions/ANGLE_instanced_arrays/).
@@ -745,10 +884,50 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
     });
   }
 
+  const formatters = [
+    formatBoolean,      // enable
+    formatUniformValue, // value
+    formatUniformValue, // size
+    formatEnum,         // type
+    formatBoolean,      // normalize
+    formatUniformValue, // stride
+    formatUniformValue, // offset
+    formatWebGLObject,  // buffer
+    formatUniformValue, // divisor
+  ];
+
+  const updateAttributes = () => {
+    for (let i = 0; i < maxAttribs; ++i) {
+      const row = attrsElem.rows[i];
+      const data = [
+        gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_ENABLED),
+        gl.getVertexAttrib(i, gl.CURRENT_VERTEX_ATTRIB),
+        gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_SIZE),
+        gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_TYPE),
+        gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_NORMALIZED),
+        gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_STRIDE),
+        gl.getVertexAttribOffset(i, gl.VERTEX_ATTRIB_ARRAY_POINTER),
+        gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING),
+        gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_DIVISOR),
+      ];
+      if (data[0]) {
+        row.classList.add('attrib-enable');
+      } else {
+        row.classList.remove('attrib-enable');
+      }
+      data.forEach((value, cellNdx) => {
+        const cell = row.cells[cellNdx];
+        const newValue = formatters[cellNdx](value);
+        updateElem(cell, newValue);
+      });
+    }
+  };
+  updateAttributes();
+
   const vaState = [
     {
-      pname: 'ELEMENT_ARRAY_BUFFER',
-      value: 'null',
+      pname: 'ELEMENT_ARRAY_BUFFER_BINDING',
+      formatter: formatWebGLObject,
       help: `
       buffer that contains element indices used when calling --gl.drawElements--.
 
@@ -758,9 +937,22 @@ function createVertexArrayDisplay(parent, attribs = [], maxAttribs = 8) {
       `,
     },
   ];
-  createStateTable(vaState, vaElem.querySelector('.state-table'), 'state');
+  const vaQueryFn = state => {
+    const {pname} = state;
+    const value = gl.getParameter(gl[pname]);
+    return value;
+  };
+
+  const stateTable = createStateTable(vaState, vaElem.querySelector('.state-table'), 'state', vaQueryFn);
   makeDraggable(vaElem);
-  return vaElem;
+
+  return {
+    elem: vaElem,
+    updateAttributes,
+    updateState: () => {
+      updateStateTable(vaState, stateTable, vaQueryFn);
+    },
+  };
 }
 
 const stencilOps = helpToMarkdown(`--KEEP--, --ZERO--, --REPLACE--, --INCR--, --INCR_WRAP--, --DECR--, --DECR_WRAP--, --INVERT--`);
@@ -778,7 +970,7 @@ const face = gl.${face.toUpperCase()};
 gl.stencilFuncSeparate(face, func, ref, mask);
 ---
 `);
-
+const stencilFuncSetters = ['stencilFunc', 'stencilFuncSeparate'];
 const stencilOpSnippet = face => helpToMarkdown(`
 ---js
 const stencilFailOp = gl.KEEP;
@@ -793,7 +985,7 @@ const face = gl.${face.toUpperCase()};
 gl.stencilOpSeparate(face, stencilFailOp, depthFailOp, depthPassUp);
 ---
 `);
-
+const stencilOpSetters = ['stencilOp', 'stencilOpSeparate'];
 const stencilWriteMaskSnippet = face => `
 write mask for stencil for ${face} facing triangles.
 
@@ -808,11 +1000,13 @@ const face = gl.${face.toUpperCase()};
 gl.stencilMaskSeparate(face, mask);
 ---
 `;
+const stencilWriteMaskSetters = ['stencilMask', 'stencilMaskSeparate'];
 
 const stencilState = [
     {
       pname: 'STENCIL_TEST',
-      value: 'false',
+      setter: ['enable', 'disable'],
+      formatter: formatUniformValue,
       help: `
       Stencil test enabled/disabled
 
@@ -824,7 +1018,8 @@ const stencilState = [
     },
     {
       pname: 'STENCIL_FUNC',
-      value: 'ALWAYS',
+      setter: stencilFuncSetters,
+      formatter: formatEnum,
       help: `
       function to use for stencil test for front facing triangles.
       One of ${webglFuncs}.
@@ -834,7 +1029,8 @@ ${stencilFuncSnippet('front')}
     },
     {
       pname: 'STENCIL_FAIL',
-      value: 'KEEP',
+      setter: stencilOpSetters,
+      formatter: formatEnum,
       help: `
       operation when stencil test fails for front facing triangles.
       One of: ${stencilOps}
@@ -844,7 +1040,8 @@ ${stencilOpSnippet('front')}
     },
     {
       pname: 'STENCIL_PASS_DEPTH_FAIL',
-      value: 'KEEP',
+      setter: stencilOpSetters,
+      formatter: formatEnum,
       help: `
       operation when depth test fails for front facing triangles.
       One of: ${stencilOps}
@@ -854,7 +1051,8 @@ ${stencilOpSnippet('front')}
     },
     {
       pname: 'STENCIL_PASS_DEPTH_PASS',
-      value: 'KEEP',
+      setter: stencilOpSetters,
+      formatter: formatEnum,
       help: `
       operation when depth test passes for front facing triangles.
       One of: ${stencilOps}
@@ -864,7 +1062,8 @@ ${stencilOpSnippet('front')}
     },
     {
       pname: 'STENCIL_REF',
-      value: '0',
+      setter: stencilFuncSetters,
+      formatter: formatX2,
       help: `
       reference value to use for stencil test for front facing triangles.
 
@@ -873,7 +1072,8 @@ ${stencilFuncSnippet('front')}
     },
     {
       pname: 'STENCIL_VALUE_MASK',
-      value: '',
+      setter: stencilFuncSetters,
+      formatter: formatX2,
       help: `
       mask value to use for stencil test for front facing triangles.
 
@@ -882,12 +1082,14 @@ ${stencilFuncSnippet('front')}
     },
     {
       pname: 'STENCIL_WRITEMASK',
-      value: '0xFF',
+      setter: stencilWriteMaskSetters,
+      formatter: formatX2,
       help: stencilWriteMaskSnippet('front'),
     },
     {
       pname: 'STENCIL_BACK_FUNC',
-      value: 'ALWAYS',
+      setter: stencilFuncSetters,
+      formatter: formatEnum,
       help: `
       function to use for stencil test for back facing triangles.
       One of ${webglFuncs}.
@@ -897,7 +1099,8 @@ ${stencilFuncSnippet('back')}
     },
     {
       pname: 'STENCIL_BACK_FAIL',
-      value: 'KEEP',
+      setter: stencilOpSetters,
+      formatter: formatEnum,
       help: `
       operation when stencil test fails for back facing triangles.
       One of: ${stencilOps}
@@ -907,7 +1110,8 @@ ${stencilOpSnippet('back')}
     },
     {
       pname: 'STENCIL_BACK_PASS_DEPTH_FAIL',
-      value: 'KEEP',
+      setter: stencilOpSetters,
+      formatter: formatEnum,
       help: `
       operation when depth test fails for back facing triangles.
       One of: ${stencilOps}
@@ -917,7 +1121,8 @@ ${stencilOpSnippet('back')}
     },
     {
       pname: 'STENCIL_BACK_PASS_DEPTH_PASS',
-      value: 'KEEP',
+      setter: stencilOpSetters,
+      formatter: formatEnum,
       help: `
       operation when depth test passes for back facing triangles.
       One of: ${stencilOps}
@@ -927,7 +1132,8 @@ ${stencilOpSnippet('back')}
     },
     {
       pname: 'STENCIL_BACK_REF',
-      value: '0',
+      setter: stencilFuncSetters,
+      formatter: formatX2,
       help: `
       reference value to use for stencil test for back facing triangles.
 
@@ -936,7 +1142,8 @@ ${stencilFuncSnippet('back')}
     },
     {
       pname: 'STENCIL_BACK_VALUE_MASK',
-      value: '0xFF',
+      setter: stencilFuncSetters,
+      formatter: formatX2,
       help: `
       mask value to use for stencil test for back facing triangles.
 
@@ -945,7 +1152,8 @@ ${stencilFuncSnippet('back')}
     },
     {
       pname: 'STENCIL_BACK_WRITEMASK',
-      value: '0xFF',
+      setter: stencilWriteMaskSetters,
+      formatter: formatX2,
       help: stencilWriteMaskSnippet('front'),
     },
 ];
@@ -982,7 +1190,7 @@ gl.blendFuncSeparate(
     srcRGBFunc, dstRGBFunc, srcAlphaFunc, dstAlphaFunc);
 ---
 `;
-
+const blendFuncSetters = ['blendFunc', 'blendFuncSeparate'];
 const blendEquationSnippet = `
 One of --FUNC_ADD--, --FUNC_SUBTRACT--, --FUNC_REVERSE_SUBTRACT--
 
@@ -996,11 +1204,13 @@ const alphaEquation = gl.FUNC_SUBTRACT;
 gl.blendEquationSeparate(rgbEquation, alphaEquation);
 ---
 `;
+const blendEquationSetters = ['blendEquation', 'blendEquationSeparate'];
 
 const blendState = [
     {
       pname: 'BLEND',
-      value: 'false',
+      setter: ['enable', 'disable'],
+      formatter: formatBoolean,
       help: `
       blending enabled/disabled
 
@@ -1012,7 +1222,8 @@ const blendState = [
     },
     {
       pname: 'BLEND_DST_RGB',
-      value: 'ZERO',
+      setter: blendFuncSetters,
+      formatter: formatEnumZero,
       help: `
       The blend function for destination RGB.
       One of ${blendFuncs}.
@@ -1022,7 +1233,8 @@ ${blendFuncSnippet}
     },
     {
       pname: 'BLEND_SRC_RGB',
-      value: 'ONE',
+      setter: blendFuncSetters,
+      formatter: formatEnumZero,
       help: `
       The blend function for source RGB.
       One of ${blendFuncs}.
@@ -1032,7 +1244,8 @@ ${blendFuncSnippet}
     },
     {
       pname: 'BLEND_DST_ALPHA',
-      value: 'ZERO',
+      setter: blendFuncSetters,
+      formatter: formatEnumZero,
       help: `
       The blend function for destination alpha
       One of ${blendFuncs}.
@@ -1042,7 +1255,8 @@ ${blendFuncSnippet}
     },
     {
       pname: 'BLEND_SRC_ALPHA',
-      value: 'ONE',
+      setter: blendFuncSetters,
+      formatter: formatEnumZero,
       help: `
       The blend function for source alpha
       One of ${blendFuncs}.
@@ -1052,7 +1266,8 @@ ${blendFuncSnippet}
     },
     {
       pname: 'BLEND_COLOR',
-      value: '0, 0, 0, 0',
+      setter: 'blendColor',
+      formatter: formatUniformValue,
       help: `
       constant color and alpha used when blend function
       is --gl.CONSTANT_COLOR--, --gl.CONSTANT_ALPHA--,
@@ -1065,7 +1280,8 @@ ${blendFuncSnippet}
     },
     {
       pname: 'BLEND_EQUATION_RGB',
-      value: 'FUNC_ADD',
+      setter: blendEquationSetters,
+      formatter: formatEnum,
       help: `
       Blend equation for RGB.
 
@@ -1074,7 +1290,8 @@ ${blendEquationSnippet}
     },
     {
       pname: 'BLEND_EQUATION_ALPHA',
-      value: 'FUNC_ADD',
+      setter: blendEquationSetters,
+      formatter: formatEnum,
       help: `
       Blend equation for alpha  .
 
@@ -1086,7 +1303,8 @@ ${blendEquationSnippet}
 const polygonState = [
     {
       pname: 'CULL_FACE',
-      value: 'false',
+      setter: ['enable', 'disable'],
+      formatter: formatBoolean,
       help: `
       Whether or not to cull triangles based on which way they are facing.
 
@@ -1101,7 +1319,8 @@ const polygonState = [
     },
     {
       pname: 'CULL_FACE_MODE',
-      value: 'BACK',
+      setter: 'cullFace',
+      formatter: formatEnum,
       help: `
       Which faces are culled when culling is on. Valid values are
       --FRONT--, --BACK--, --FRONT_AND_BACK--. 
@@ -1113,7 +1332,8 @@ const polygonState = [
     },
     {
       pname: 'FRONT_FACE',
-      value: 'CCW',
+      setter: 'frontFace',
+      formatter: formatEnum,
       help: `
       Which faces are considered front facing. Valid values are
       --CW--, --CCW--. 
@@ -1125,7 +1345,8 @@ const polygonState = [
     },
     {
       pname: 'POLYGON_OFFSET_UNITS',
-      value: '0',
+      setter: 'polygonOffset',
+      formatter: formatUniformValue,
       help: `The amount to offset the calculated depth value for the depth test.
 
       ---js
@@ -1137,7 +1358,8 @@ const polygonState = [
     },
     {
       pname: 'POLYGON_OFFSET_FACTOR',
-      value: '0',
+      setter: 'polygonOffset',
+      formatter: formatUniformValue,
       help: `The depth factor to offset the calculated depth value for the depth test.
 
       ---js
@@ -1152,7 +1374,8 @@ const polygonState = [
 const clearState = [
     {
       pname: 'COLOR_CLEAR_VALUE',
-      value: '0, 0, 0, 0',
+      setter: 'clearColor',
+      formatter: formatUniformValue,
       help: `
       Value to clear the color buffer to when calling --gl.clear--
       with the --gl.COLOR_BUFFER_BIT-- set
@@ -1171,7 +1394,8 @@ const clearState = [
     },
     {
       pname: 'DEPTH_CLEAR_VALUE',
-      value: '1',
+      setter: 'clearDepth',
+      formatter: formatG,
       help: `
       the value to clear the depth buffer to when calling --gl.clear--
       with the --gl.DEPTH_BUFFER_BIT-- set
@@ -1183,7 +1407,8 @@ const clearState = [
     },
     {
       pname: 'STENCIL_CLEAR_VALUE',
-      value: '0xFF',
+      setter: 'clearStencil',
+      formatter: formatX2,
       help: `
       the value to clear the depth buffer to when calling --gl.clear--
       with the --gl.STENCIL_BUFFER_BIT-- set
@@ -1195,25 +1420,11 @@ const clearState = [
     },
 ];
 
-const miscState = [
-    {
-      pname: 'COLOR_WRITEMASK',
-      value: 'true, true, true, true',
-      help: `
-      sets which channels can be written to. Set with
-
-      ---js
-      const red = true;
-      const green = true;
-      const blue = true;
-      const alpha = true;
-      gl.colorMask(red, green, blue, alpha);
-      ---
-      `,
-    },
+const commonState = [
     {
       pname: 'VIEWPORT',
-      value: '0, 0, 300, 150',
+      setter: 'viewport',
+      formatter: formatUniformValue,
       help: `
       How to convert from clip space to pixel space.
 
@@ -1227,8 +1438,95 @@ const miscState = [
       `,
     },
     {
+      pname: 'ARRAY_BUFFER_BINDING',
+      setter: [],
+      formatter: formatWebGLObject,
+      help: `
+      The --ARRAY_BUFFER-- binding point is mostly
+      just like an internal variable inside webgl. You set it by calling
+      --gl.bindBuffer(gl.ARRAY_BUFFER, someBuffer);-- and then all other
+      buffer functions can refer to the buffer bound there.
+      `,
+    },
+    {
+      pname: 'CURRENT_PROGRAM',
+      setter: ['useProgram'],
+      formatter: formatWebGLObject,
+      help: `
+      The current program. Used when calling --gl.drawArrays--, --gl.drawElements--
+      and --gl.uniformXXX---.
+
+      ---js
+      gl.useProgram(someProgram);
+      ---
+      `,
+    },
+    {
+      pname: 'VERTEX_ARRAY_BINDING',
+      setter: ['bindVertexArray'],
+      formatter: formatWebGLObjectOrDefaultVAO,
+      help: `
+      The current vertex array. In WebGL 1.0 this is only settable via the 
+      [--OES_vertex_array_object--](https://www.khronos.org/registry/webgl/extensions/OES_vertex_array_object/)
+      extension. Otherwise there is only the 1 default vertex array in WebGL 1.0.
+      `,
+    },
+    {
+      pname: 'ACTIVE_TEXTURE',
+      setter: 'activeTexture',
+      formatter: formatEnum,
+      help: `
+      The --ACTIVE_TEXTURE-- is just an index into the texture units array
+      so that other function that take a target like --TEXTURE_2D-- or
+      --TEXTURE_CUBE_MAP-- know which texture unit to look at. It is set
+      with --gl.activeTexture(gl.TEXTURE0 + unit)--
+
+      **Pseudo Code**
+
+      ---js
+      class WebGL {
+        constructor() {
+          this.activeTexture = 0;
+          this.textureUnits = [
+            { TEXTURE_2D: null, TEXTURE_CUBE_MAP: null, }, 
+            { TEXTURE_2D: null, TEXTURE_CUBE_MAP: null, }, 
+            ...
+          ]
+        }
+        activeTexture(enum) {
+          this.activeTexture = enum - gl.TEXTURE0;  // convert to index
+        }
+        texParameteri(target, pname, value) {
+          const texture = this.textureUnits[this.activeTexture][target];
+          ... set parameter on 'texture'...
+        }
+        ...
+      ---
+      `,
+    },
+];
+
+const miscState = [
+    {
+      pname: 'COLOR_WRITEMASK',
+      setter: 'colorMask',
+      formatter: formatUniformValue,
+      help: `
+      sets which channels can be written to. Set with
+
+      ---js
+      const red = true;
+      const green = true;
+      const blue = true;
+      const alpha = true;
+      gl.colorMask(red, green, blue, alpha);
+      ---
+      `,
+    },
+    {
       pname: 'SCISSOR_TEST',
-      value: 'false',
+      setter: ['enable', 'disable'],
+      formatter: formatUniformValue,
       help: `
       Whether the scissor test is enabled
 
@@ -1243,7 +1541,8 @@ const miscState = [
     },
     {
       pname: 'SCISSOR_BOX',
-      value: '0, 0, 0, 0',
+      setter: 'scissor',
+      formatter: formatUniformValue,
       help: `
       The dimensions of the scissor test. If the the scissor test is enabled
       then WebGL will not rendered pixels outside the scissor box.
@@ -1259,7 +1558,8 @@ const miscState = [
     },
     {
       pname: 'UNPACK_ALIGNMENT',
-      value: '4',
+      setter: 'pixelStorei',
+      formatter: formatUniformValue,
       help: `
       Used by --texImage-- functions. Each row of data
       must be aligned by this number of bytes and a multiple of this
@@ -1273,7 +1573,8 @@ const miscState = [
     },
     {
       pname: 'PACK_ALIGNMENT',
-      value: '4',
+      setter: 'pixelStorei',
+      formatter: formatUniformValue,
       help: `
       Used by --readPixels-- function. Each row of data
       must be aligned by this number of bytes and a multiple of this
@@ -1287,14 +1588,29 @@ const miscState = [
     },
 ];
 
-function createBufferDisplay(parent, name, webglObject) {
+function createBufferDisplay(parent, name /*, webglObject */) {
   const bufElem = createTemplate(parent, '#buffer-template');
   setName(bufElem, name);
+  const dataExpander = createExpander(bufElem, 'data');
+  const dataElem = addElem('code', dataExpander, {className: 'data'});
+
+  const updateData = (dataOrSize) => {
+    const maxValues = 9;
+    const data = typeof dataOrSize === 'number' ? new Array(maxValues).fill(0) : dataOrSize;
+    expand(dataExpander);
+    flash(dataElem);
+    const value = formatUniformValue(Array.from(data).slice(0, maxValues));
+    dataElem.textContent = `${value}${data.length > maxValues ? ', ...' : ''}`;
+  };
+
   makeDraggable(bufElem);
-  return bufElem;
+  return {
+    elem: bufElem,
+    updateData,
+  };
 }
 
-function createTextureDisplay(parent, name, webglObject, imgHref) {
+function createTextureDisplay(parent, name, texture, imgHref) {
   const texElem = createTemplate(parent, '#texture-template');
   setName(texElem, name);
 
@@ -1352,10 +1668,12 @@ function createTextureDisplay(parent, name, webglObject, imgHref) {
     });
   }
 
+  const updateData = () => {};
+
   const texState = [
    {
-      pname: 'WRAP_S',
-      value: 'REPEAT',
+      pname: 'TEXTURE_WRAP_S',
+      formatter: formatEnum,
       help: `
       what happens for texture coordinates outside the 0 to 1 range
       in the S direction (horizontal). Can be one of --gl.REPEAT--,
@@ -1369,8 +1687,8 @@ function createTextureDisplay(parent, name, webglObject, imgHref) {
       ${activeTexNote}`,
     },
     {
-      pname: 'WRAP_T',
-      value: 'REPEAT',
+      pname: 'TEXTURE_WRAP_T',
+      formatter: formatEnum,
       help: `
       what happens for texture coordinates outside the 0 to 1 range
       in the S direction (vertical). Can be one of --gl.REPEAT--,
@@ -1384,8 +1702,8 @@ function createTextureDisplay(parent, name, webglObject, imgHref) {
       ${activeTexNote}`,
     },
     {
-      pname: 'MIN_FILTER',
-      value: 'LINEAR_MIPMAP_NEAREST',
+      pname: 'TEXTURE_MIN_FILTER',
+      formatter: formatEnum,
       help: `
       How the texture is sampled when drawn smaller than its intrinsic size.
       Can be one of:
@@ -1404,8 +1722,8 @@ function createTextureDisplay(parent, name, webglObject, imgHref) {
       ${activeTexNote}`,
     },
     {
-      pname: 'MAG_FILTER',
-      value: 'LINEAR',
+      pname: 'TEXTURE_MAG_FILTER',
+      formatter: formatEnum,
       help: `
       How the texture is sampled when drawn larger than its intrinsic size.
       Can be one of
@@ -1420,9 +1738,23 @@ function createTextureDisplay(parent, name, webglObject, imgHref) {
     },
   ];
 
-  createStateTable(texState, texElem, 'texture state');
+  const queryFn = state => {
+    const {pname} = state;
+    const info = webglObjects.get(texture);
+    const target = info.target;
+    const value = gl.getTexParameter(target, gl[pname]);
+    return value;
+  };
+
+  const stateTable = createStateTable(texState, texElem, 'texture state', queryFn, false);
   makeDraggable(texElem);
-  return texElem;
+  return {
+    elem: texElem,
+    updateData,
+    updateState: () => {
+      updateStateTable(texState, stateTable, queryFn);
+    },
+  };
 }
 
 function createTextureUnits(parent, maxUnits = 8) {
@@ -1457,7 +1789,20 @@ function createTextureUnits(parent, maxUnits = 8) {
       },
     });
   }
-  return expander;
+
+  const targets = [gl.TEXTURE_BINDING_2D, gl.TEXTURE_BINDING_CUBE_MAP];
+  const updateCurrentTextureUnit = () => {
+    const unit = gl.getParameter(gl.ACTIVE_TEXTURE) - gl.TEXTURE0;
+    const row = tbody.rows[unit];
+    targets.forEach((target, colNdx) => {
+      updateElem(row.cells[colNdx], formatWebGLObject(gl.getParameter(target)));
+    });
+  };
+
+  return {
+    elem: expander,
+    updateCurrentTextureUnit,
+  };
 }
 
 function expand(elem) {
@@ -1466,33 +1811,82 @@ function expand(elem) {
   } else {
     elem.querySelector('.expander').classList.add('open');
   }
+  return elem;
 }
 
 const diagramElem = document.querySelector('#diagram');
 const codeElem = document.querySelector('#code');
 
+function globalStateQuery(state) {
+  const {pname} = state;
+  const value = gl.getParameter(gl[pname]);
+  if (gl.getError()) {
+    debugger;  // eslint-disable-line no-debugger
+  }
+  return value;
+}
+const defaultVAOInfo = {
+  ui: createVertexArrayDisplay(diagramElem, '*default*', null),
+};
+
+const settersToWrap = {};
+
+function createStateUI(stateTable, parent, name, queryFn) {
+  const elem = createStateTable(stateTable, parent, name, queryFn);
+  const updateState = () => {
+    updateStateTable(stateTable, elem, queryFn);
+  };
+
+  for (const state of stateTable) {
+    const setters = Array.isArray(state.setter) ? state.setter : [state.setter];
+    for (const setter of setters) {
+      if (!settersToWrap[setter]) {
+        settersToWrap[setter] = [];
+      }
+      const stateUpdaters = settersToWrap[setter];
+      if (stateUpdaters.indexOf(updateState) < 0) {
+        stateUpdaters.push(updateState);
+      }
+    }
+  }
+  return {
+    elem,
+    updateState,
+  };
+}
 const globalState = document.querySelector('#global-state');
-expand(createTextureUnits(globalState, 8));
-expand(createStateTable(clearState, globalState, 'clear state'));
-expand(createStateTable(depthState, globalState, 'depth state'));
-createStateTable(blendState, globalState, 'blend state');
-createStateTable(miscState, globalState, 'misc state');
-createStateTable(stencilState, globalState, 'stencil state');
-createStateTable(polygonState, globalState, 'polygon state');
+const globalUI = {
+  commonState: createStateUI(commonState, globalState, 'common state', globalStateQuery),
+  textureUnits: createTextureUnits(globalState, 8),
+  clearState: createStateUI(clearState, globalState, 'clear state', globalStateQuery),
+  depthState: createStateUI(depthState, globalState, 'depth state', globalStateQuery),
+  blendState: createStateUI(blendState, globalState, 'blend state', globalStateQuery),
+  miscState: createStateUI(miscState, globalState, 'misc state', globalStateQuery),
+  stencilState: createStateUI(stencilState, globalState, 'stencil state', globalStateQuery),
+  polygonState: createStateUI(polygonState, globalState, 'polygon state', globalStateQuery),
+};
+expand(globalUI.textureUnits.elem);
+expand(globalUI.commonState.elem);
+expand(globalUI.clearState.elem);
+expand(globalUI.depthState.elem);
+
 makeDraggable(globalState, 10, 10);
 makeDraggable(document.querySelector('#canvas'), -10, 10);
 
+
 let currentLine;
 let unknownId = 0;
-const webglObjects = new Map();
 const nameRE = /\s+(\w+)\s*=\s*\w+\.create\w+/;
 
 function wrapFn(fnName, fn) {
-  WebGLRenderingContext.prototype[fnName] = function(origFn) {
+  gl[fnName] = function(origFn) {
+    if (!origFn) {
+      debugger;  // eslint-disable-line no-debugger
+    }
     return function(...args) {
       return fn.call(this, origFn, ...args);
     };
-  }(WebGLRenderingContext.prototype[fnName]);
+  }(gl[fnName]);
 }
 
 function wrapCreationFn(fnName, uiFactory) {
@@ -1507,8 +1901,19 @@ function wrapCreationFn(fnName, uiFactory) {
     return webglObject;
   });
 }
+
+function wrapDeleteFn(fnName) {
+  wrapFn(fnName, function(origFn, webglObject) {
+    origFn.call(this, webglObject);
+    const info = webglObjects.get(webglObject);
+    info.deleted = true;
+    const {elem} = info.ui;
+    elem.parentElement.removeChild(elem);
+  });
+}
+
 wrapCreationFn('createTexture', (name, webglObject) => {
-  return createTextureDisplay(diagramElem, name, webglObject, '/webgl/resources/f-texture.png')
+  return createTextureDisplay(diagramElem, name, webglObject, '/webgl/resources/f-texture.png');
 });
 wrapCreationFn('createBuffer', (name, webglObject) => {
   return createBufferDisplay(diagramElem, name, webglObject);
@@ -1519,75 +1924,169 @@ wrapCreationFn('createShader', (name, webglObject) => {
 wrapCreationFn('createProgram', (name, webglObject) => {
   return createProgramDisplay(diagramElem, name, webglObject);
 });
+wrapDeleteFn('deleteTexture');
+wrapDeleteFn('deleteBuffer');
+wrapDeleteFn('deleteShader');
+wrapDeleteFn('deleteProgram');
+
+for (const [fnName, stateUpdaters] of Object.entries(settersToWrap)) {
+  wrapFn(fnName, function(origFn, ...args) {
+    origFn.call(this, ...args);
+    stateUpdaters.forEach(updater => updater());
+  });
+}
+
+Object.keys(WebGLRenderingContext.prototype)
+    .filter(name => /^uniform(\d|Matrix)/.test(name))
+    .forEach((fnName) => {
+      wrapFn(fnName, function(origFn, ...args) {
+        origFn.call(this, ...args);
+        const program = gl.getParameter(gl.CURRENT_PROGRAM);
+        const {ui} = webglObjects.get(program);
+        ui.updateUniforms();
+      });
+    });
+
+wrapFn('bindTexture', function(origFn, target, texture) {
+  origFn.call(this, target, texture);
+  const info = webglObjects.get(texture);
+  if (!info.target) {
+    info.target = target;
+    info.ui.updateState();
+  }
+  globalUI.textureUnits.updateCurrentTextureUnit(target);
+});
+function getCurrentTextureForTarget(target) {
+  if (target === gl.TEXTURE_CUBE_MAP) {
+    return gl.getParameter(gl.TEXTURE_BINDING_CUBE_MAP);
+  }
+  if (target === gl.TEXTURE_2D) {
+    return gl.getParameter(gl.TEXTURE_BINDING_2D);
+  }
+  throw new Error(`unknown target: ${target}`);
+}
+wrapFn('texParameteri', function(origFn, target, ...args) {
+  origFn.call(this, target, ...args);
+  const texture = getCurrentTextureForTarget(target);
+  const {ui} = webglObjects.get(texture);
+  ui.updateState();
+});
 wrapFn('shaderSource', function(origFn, shader, source) {
   origFn.call(this, shader, source);
-  // TODO: handle one already attached
   const {ui} = webglObjects.get(shader);
-  const expander = createExpander(ui, 'source');
-  const preElem = addElem('pre', expander);
-  const codeElem = addElem('code', preElem, {className: 'lang-glsl'});
-  codeElem.textContent = source;
-  hljs.highlightBlock(codeElem);
-  expand(expander);
+  ui.updateSource();
 });
 
 wrapFn('attachShader', function(origFn, program, shader) {
   origFn.call(this, program, shader);
-  // TODO: handle one already attached
   const {ui} = webglObjects.get(program);
-  const type = gl.getShaderParameter(shader, gl.SHADER_TYPE) === gl.VERTEX_SHADER ? 'vertex' : 'fragment';
-//  createShaderDisplay(ui, type, gl.getShaderSource(shader));
+  ui.updateAttachedShaders();
+});
+
+wrapFn('compileShader', function(origFn, shader) {
+  origFn.call(this, shader);
+  const {ui} = webglObjects.get(shader);
+  ui.updateState();
 });
 
 wrapFn('linkProgram', function(origFn, program) {
   origFn.call(this, program);
-  // TODO: check for success
-
   const {ui} = webglObjects.get(program);
-  const attribExpander = createExpander(ui, 'attribute info', {
-    dataset: {
-      hint: 'attributes are user defined. Their values come from buffers as specified in a *vertex array*.',
-    },
-  });
-  const uniformExpander = createExpander(ui, 'uniforms', {
-    dataset: {
-      hint: 'uniform values are user defined program state. The locations and values are different for each program.',
-    },
-  });
-
-  createProgramAttributes(attribExpander, gl, program);
-  createProgramUniforms(uniformExpander, gl, program);
-
-  expand(attribExpander);
-  expand(uniformExpander);
-
+  ui.updateState();
+  if (gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    ui.scanAttributes();
+    ui.scanUniforms();
+  }
+});
+wrapFn('bindBuffer', function(origFn, bindPoint, buffer) {
+  origFn.call(this, bindPoint, buffer);
+  if (bindPoint === gl.ARRAY_BUFFER) {
+    globalUI.commonState.updateState();
+  } else {
+    const {ui} = getCurrentVAOInfo();
+    ui.updateState();
+  }
+});
+wrapFn('bufferData', function(origFn, bindPoint, dataOrSize, hint) {
+  origFn.call(this, bindPoint, dataOrSize, hint);
+  const buffer = gl.getParameter(bindPoint === gl.ARRAY_BUFFER ? gl.ARRAY_BUFFER_BINDING : gl.ELEMENT_ARRAY_BUFFER_BINDING);
+  const {ui} = webglObjects.get(buffer);
+  ui.updateData(dataOrSize);
+});
+function getCurrentVAOInfo() {
+  //const vertexArray = gl.getParameter(gl.VERTEX_ARRAY_BINDING);
+  //const info = vertexArray ? webglObjects.get(vertexArray) : defaultVAOInfo;
+  return defaultVAOInfo;
+}
+wrapFn('enableVertexAttribArray', function(origFn, ...args) {
+  origFn.call(this, ...args);
+  const {ui} = getCurrentVAOInfo();
+  ui.updateAttributes();
+});
+wrapFn('disableVertexAttribArray', function(origFn, ...args) {
+  origFn.call(this, ...args);
+  const {ui} = getCurrentVAOInfo();
+  ui.updateAttributes();
+});
+wrapFn('vertexAttribPointer', function(origFn, ...args) {
+  origFn.call(this, ...args);
+  const {ui} = getCurrentVAOInfo();
+  ui.updateAttributes();
 });
 
 const js = document.querySelector('#js').text;
 const lines = [...js.matchAll(/[^`;]*(?:`[^`]*?`)?[^`;]*;?;\n/g)].map(m => {
-  const code = m[0];
-  const elem = document.createElement('pre');
-  elem.textContent = code;
-  codeElem.appendChild(elem);
+  let code = m[0];
+  if (code.startsWith('\n')) {
+    code = code.substr(1);
+    addElem('div', codeElem, {textContent: ' ', className: 'hljs'});
+  }
+  const elem = addElem('div', codeElem);
+  addElem('div', elem, {className: 'line-marker'});
+  hljs.highlightBlock(addElem('pre', elem, {textContent: code}));
   return {
     code,
     elem,
   };
 });
-for (const {code} of lines) {
-  currentLine = code;
-  eval(code.replace(/const |let /g, ''));
+
+let currentLineNo = 0;
+
+const stepElem = document.querySelector('#step');
+stepElem.addEventListener('click', step);
+const runElem = document.querySelector('#run');
+runElem.addEventListener('click', run);
+
+function step() {
+  lines[currentLineNo].elem.classList.remove('current-line');
+  execute(lines[currentLineNo++].code);
+  highlightCurrentLine();
 }
 
-//const tx = createTextureDisplay(diagramElem, '/webgl/resources/f-texture.png');
+function highlightCurrentLine() {
+  if (currentLineNo < lines.length) {
+    const {elem} = lines[currentLineNo];
+    elem.classList.add('current-line');
+    elem.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest',
+    });
+  }
+}
+highlightCurrentLine();
 
-createVertexArrayDisplay(diagramElem, [
-  {size: 2, type: 'FLOAT', buffer: 'texcoordBuffer',},
-  {size: 3, type: 'FLOAT', buffer: 'normalBuffer',},
-  {size: 3, type: 'FLOAT', buffer: 'positionBuffer',},
-]);
+function execute(code) {
+  currentLine = code;
+  eval(code.replace(/const |let /g, ''));  // eslint-disable-line no-eval
+}
 
-//createProgramDisplay(diagramElem, gl, prg);
+async function run() {
+  while (currentLineNo < lines.length) {
+    step();
+    await wait(50);
+  }
+}
+
 /*
 var divA       = globalState;
 var divB       = tx;
@@ -1612,7 +2111,7 @@ var drawConnector = function() {
   };
   var posnARight = {
     x: divAPos.left + divAPos.width + 8,
-    y: divAPos.top  + divAPos.height / 2    
+    y: divAPos.top  + divAPos.height / 2
   };
   var posnBLeft = {
     x: divBPos.left - 8,

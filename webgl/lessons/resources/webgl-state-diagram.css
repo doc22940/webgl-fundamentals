@@ -92,8 +92,19 @@ body {
   margin-top: 10px;
   border: 1px solid black;
 }
-/* .vertex-array .attrib-enabled {  } */
-.vertex-array .attrib-disabled { background: #888; }
+.vertex-array .used-when-disabled {
+  background: inherit;
+}
+.vertex-array .used-when-enabled {
+  background: #888;
+}
+.vertex-array .attrib-enable .used-when-enabled {
+  background: inherit;
+}
+.vertex-array .attrib-enable .used-when-disabled {
+  background: #888;
+}
+.attrib-disabled { background: #888; }
 .shader {
   display: flex;
   flex-direction: column;
@@ -117,13 +128,15 @@ body {
 .expander.open {
   background: rgba(255, 255, 255, 0.3);
   padding: 0.5em;
-  /* animation: flash 1s 1; */
 }
 .expander.open>*:nth-child(0n+2) {
   display: unset;
 }
 .expander.open>div:first-child:before {
   content: '▼';
+}
+.flash {
+  animation: flash 1s 1;
 }
 
 @keyframes flash {
@@ -206,15 +219,57 @@ th {
   width: 70%;
   user-select: none;
 }
-#code {
+#codearea {
   flex: 1 1 auto;
-  overflow: scroll;
-  background: #444;
+  background: #23241f;
   color: white;
   width: 30%;
   max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+#ui {
+  font-size: xx-large;
+  flex: 0 0 auto;
+  display: flex;
+}
+#ui>* {
+  margin: 0.1em;
   padding: 0.5em;
+  background: hsl(240, 100%, 50%);
+  color: white;
+  line-height: 0.5;
+}
+#ui>*:hover {
+  background: hsl(240, 100%, 80%);
+}
+#code {
+  flex: 1 1 auto;
+  padding: 0.5em;
+  overflow: scroll;
+}
+#code>div {
+  display: flex;
 }
 #code pre {
   margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+#code pre:hover {
+  background: hsl(240, 100%, 20%);
+}
+#code .line-marker:before {
+  content: '>●';
+  font-weight: bold;
+  color: red;
+  visibility: hidden;
+}
+#code .current-line .line-marker:before {
+  visibility: visible;
+}
+
+.current-line,
+.current-line .hljs {
+  background: hsl(0, 100%, 10%);
 }
