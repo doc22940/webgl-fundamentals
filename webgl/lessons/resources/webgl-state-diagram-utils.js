@@ -1,16 +1,10 @@
 /* eslint strict: "off" */
-//'use strict';
+/* eslint no-undef: "error" */
 
-// TODO:
-// * connect arrows
-// * position things
-// * texture mips
-
+/* global */
 
 const px = (v) => `${v}px`;
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-const glEnumToString = twgl.glEnumToString;
 
 const formatG = v => typeof v === 'number' ? v.toFixed(3).replace(/\.?0+$/, '') : v;
 function formatX(v, n = 0) {
@@ -18,8 +12,6 @@ function formatX(v, n = 0) {
   return `0x${s.padStart(n, '0').substr(0, 2)}`;
 }
 const formatX2 = v => formatX(v, 2);
-const formatEnum = v => glEnumToString(gl, v);
-const formatEnumZero = v => v ? v === 1 ? 'ONE' : glEnumToString(gl, v) : 'ZERO';
 const formatBoolean = v => v.toString();
 
 function flash(elem) {
@@ -117,14 +109,12 @@ function createTemplate(parent, selector) {
   return elem;
 }
 
-window.stateDiagramUtils = {
+export {
   px,
   wait,
   formatG,
   formatX,
   formatX2,
-  formatEnum,
-  formatEnumZero,
   formatBoolean,
   formatUniformValue,
   createTemplate,

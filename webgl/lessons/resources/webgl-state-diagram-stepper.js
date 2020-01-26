@@ -1,80 +1,71 @@
 /* eslint strict: "off" */
-//'use strict';
+/* eslint no-undef: "error" */
 
-// TODO:
-// * connect arrows
-// * position things
-// * texture mips
+/* global evalHelper, hljs */
 
-(function() {
-  function evalHelper(code) {
-    eval(code);    // eslint-disable-line no-eval
+import { addElem, wait } from './webgl-state-diagram-utils.js';
+
+export default class Stepper {
+  constructor() {
+    this.unknownId = 0;
+    this.currentLine = '';
+    this.nameRE = /\s+(\w+)\s*=\s*\w+\.create\w+/;
   }
-
-  class Stepper {
-    constructor() {
-      this.unknownId = 0;
-      this.currentLine = '';
-      this.nameRE = /\s+(\w+)\s*=\s*\w+\.create\w+/;
-    }
-    init(codeElem, js) {
-      const lines = [...js.matchAll(/[^`;]*(?:`[^`]*?`)?[^`;]*;?;\n/g)].map(m => {
-        let code = m[0];
-        if (code.startsWith('\n')) {
-          code = code.substr(1);
-          addElem('div', codeElem, {textContent: ' ', className: 'hljs'});
-        }
-        const elem = addElem('div', codeElem);
-        addElem('div', elem, {className: 'line-marker'});
-        hljs.highlightBlock(addElem('pre', elem, {textContent: code}));
-        return {
-          code,
-          elem,
-        };
-      });
-
-      let currentLineNo = 0;
-
-      const stepElem = document.querySelector('#step');
-      stepElem.addEventListener('click', step);
-      const runElem = document.querySelector('#run');
-      runElem.addEventListener('click', run);
-
-      const execute = (code) => {
-        this.currentLine = code;
-        evalHelper(code.replace(/const |let /g, ''));
+  init(codeElem, js) {
+    const lines = [...js.matchAll(/[^`;]*(?:`[^`]*?`)?[^`;]*;?;\n/g)].map(m => {
+      let code = m[0];
+      if (code.startsWith('\n')) {
+        code = code.substr(1);
+        addElem('div', codeElem, {textContent: ' ', className: 'hljs'});
+      }
+      const elem = addElem('div', codeElem);
+      addElem('div', elem, {className: 'line-marker'});
+      hljs.highlightBlock(addElem('pre', elem, {textContent: code}));
+      return {
+        code,
+        elem,
       };
+    });
 
-      function step() {
-        lines[currentLineNo].elem.classList.remove('current-line');
-        execute(lines[currentLineNo++].code);
-        highlightCurrentLine();
-      }
+    let currentLineNo = 0;
 
-      function highlightCurrentLine() {
-        if (currentLineNo < lines.length) {
-          const {elem} = lines[currentLineNo];
-          elem.classList.add('current-line');
-          elem.scrollIntoView({
-            block: 'nearest',
-            inline: 'nearest',
-          });
-        }
-      }
+    const stepElem = document.querySelector('#step');
+    stepElem.addEventListener('click', step);
+    const runElem = document.querySelector('#run');
+    runElem.addEventListener('click', run);
+
+    const execute = (code) => {
+      this.currentLine = code;
+      evalHelper(code.replace(/const |let /g, ''));
+    };
+
+    function step() {
+      lines[currentLineNo].elem.classList.remove('current-line');
+      execute(lines[currentLineNo++].code);
       highlightCurrentLine();
+    }
 
-      async function run() {
-        while (currentLineNo < lines.length) {
-          step();
-          await wait(50);
-        }
+    function highlightCurrentLine() {
+      if (currentLineNo < lines.length) {
+        const {elem} = lines[currentLineNo];
+        elem.classList.add('current-line');
+        elem.scrollIntoView({
+          block: 'nearest',
+          inline: 'nearest',
+        });
       }
     }
-    guessIdentifierOfCurrentLine() {
-      const m = this.nameRE.exec(this.currentLine.trim());
-      return m ? m[1] : `-unknown${++this.unknownId}-`;
+    highlightCurrentLine();
+
+    async function run() {
+      while (currentLineNo < lines.length) {
+        step();
+        await wait(50);
+      }
     }
   }
-
-  window.Stepper = Stepper;
-}());
+  guessIdentifierOfCurrentLine() {
+    const m = this.nameRE.exec(this.currentLine.trim());
+    return m ? m[1] : `-unknown${++this.unknownId}-`;
+  }
+}
