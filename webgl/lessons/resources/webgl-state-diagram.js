@@ -5,13 +5,14 @@
 // * connect arrows
 // * position things
 // * texture mips
-// * fix attrib css
-
 
 hljs.initHighlightingOnLoad();
 
 var gl = document.querySelector('canvas').getContext('webgl');
 twgl.addExtensionsToContext(gl);
+
+const diagramElem = document.querySelector('#diagram');
+const codeElem = document.querySelector('#code');
 
 const webglObjects = new Map();
 
@@ -1814,9 +1815,6 @@ function expand(elem) {
   return elem;
 }
 
-const diagramElem = document.querySelector('#diagram');
-const codeElem = document.querySelector('#code');
-
 function globalStateQuery(state) {
   const {pname} = state;
   const value = gl.getParameter(gl[pname]);
@@ -1828,6 +1826,7 @@ function globalStateQuery(state) {
 const defaultVAOInfo = {
   ui: createVertexArrayDisplay(diagramElem, '*default*', null),
 };
+setRelativePosition(defaultVAOInfo.ui.elem, diagramElem, 10, -10);
 
 const settersToWrap = {};
 

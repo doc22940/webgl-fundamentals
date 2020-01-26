@@ -218,6 +218,7 @@ th {
   flex: 3 1 auto;
   width: 70%;
   user-select: none;
+  min-height: 100vh;
 }
 #codearea {
   flex: 1 1 auto;
