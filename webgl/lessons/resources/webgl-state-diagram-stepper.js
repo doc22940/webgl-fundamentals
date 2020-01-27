@@ -5,13 +5,17 @@
 
 import { addElem, wait } from './webgl-state-diagram-utils.js';
 
+function noop() {}
+
 export default class Stepper {
   constructor() {
     this.unknownId = 0;
     this.currentLine = '';
     this.nameRE = /\s+(\w+)\s*=\s*\w+\.create\w+/;
   }
-  init(codeElem, js) {
+
+  init(codeElem, js, options) {
+    const {onAfter = noop} = options;
     const lines = [...js.matchAll(/[^`;]*(?:`[^`]*?`)?[^`;]*;?;\n/g)].map(m => {
       let code = m[0];
       if (code.startsWith('\n')) {
@@ -43,6 +47,7 @@ export default class Stepper {
       lines[currentLineNo].elem.classList.remove('current-line');
       execute(lines[currentLineNo++].code);
       highlightCurrentLine();
+      onAfter();
     }
 
     function highlightCurrentLine() {

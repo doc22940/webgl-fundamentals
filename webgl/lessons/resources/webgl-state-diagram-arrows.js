@@ -100,7 +100,7 @@ function addArrow(parent) {
 
 const p = ({x, y}) => `${x},${y}`;
 
-const arrowCPOff = 50;
+const arrowCPOff = 100;
 const arrowStartOff = 1;
 const arrowEndOff = 15;
 

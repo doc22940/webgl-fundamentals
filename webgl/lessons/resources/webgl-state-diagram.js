@@ -155,37 +155,75 @@ function main() {
     window.removeEventListener('mouseup', dragStop);
   }
 
-  function setRelativePosition(elem, base, x, y) {
-    const elemRect = elem.getBoundingClientRect();
-    const baseRect = base.getBoundingClientRect();
-    elem.style.left = px(x >= 0 ? x : baseRect.right  + x - elemRect.width  | 0);
-    elem.style.top  = px(y >= 0 ? y : baseRect.bottom + y - elemRect.height | 0);
+  // format for position is selfSide:baseSide:offset.
+  // eg.: left:right-10 = put our left side - 10 units from right of base
+  const windowPositions = [
+    { note: 'vertex-array', base: '#diagram',       x: 'left:left+10',   y: 'bottom:bottom-10', },
+    { note: 'global-state', base: '#diagram',       x: 'left:left+10',   y: 'top:top+10', },
+    { note: 'canvas',       base: '#diagram',       x: 'right:right-10', y: 'top:top+10', },
+    { note: 'v-shader',     base: 'canvas',         x: 'left:left-50',   y: 'top:bottom+10', },
+    { note: 'f-shader',     base: 'vertexShader',   x: 'left:left+0',    y: 'top:bottom+10', },
+    { note: 'program',      base: 'global state',   x: 'left:right+10',  y: 'top:top+0', },
+    { note: 'p-buffer',     base: 'canvas',         x: 'left:left+70',   y: 'top:bottom+10', },
+    { note: 'n-buffer',     base: 'positionBuffer', x: 'left:left-0',    y: 'top:bottom+10', },
+    { note: 't-buffer',     base: 'normalBuffer',   x: 'left:left-0',    y: 'top:bottom+10', },
+    { note: 'i-buffer',     base: 'texcoordBuffer', x: 'left:left-0',    y: 'top:bottom+10', },
+    { note: 'texture ',     base: 'indexBuffer',    x: 'left:left-0',    y: 'top:bottom+10', },
+  ];
+  let windowCount = 0;
+  function getNextWindowPosition(elem) {
+    const info = windowPositions[windowCount++];
+    let x = windowCount * 10;
+    let y = windowCount * 10;
+    if (info) {
+      const {base, x: xDesc, y: yDesc} = info;
+      const baseElem = getWindowElem(base);
+      x = computeRelativePosition(elem, baseElem, xDesc);
+      y = computeRelativePosition(elem, baseElem, yDesc);
+    }
+    return {x, y};
   }
 
+  const relRE = /(\w+):(\w+)([-+]\d+)/;
+  function computeRelativePosition(elem, base, desc) {
+    try {
+    const [, elemSide, baseSide, offset] = relRE.exec(desc);
+    const rect = elem.getBoundingClientRect();
+    const elemRect = {
+      left: 0,
+      top: 0,
+      right: -rect.width,
+      bottom: -rect.height,
+    };
+    const baseRect = base.getBoundingClientRect();
+    return elemRect[elemSide] + baseRect[baseSide] + parseInt(offset) | 0;
+    } catch (e) {
+      console.error(e);
+      debugger;
+    }
+  }
 
-  const windowPositions = [
-    { note: 'vertex-array', base: '#diagram',        x: 'left+10',  y: 'bottom-10', },
-    { note: 'global-state', base: '#diagram',        x: 'left+10',  y: 'top+10', },
-    { note: 'canvas',       base: '#diagram',        x: 'right-10', y: 'top+10', },
-    { note: 'v-shader',     base: 'canvas',          x: 'left-50',  y: 'bottom+10', },
-    { note: 'f-shader',     base: 'vertexShader ',   x: 'left+0',   y: 'bottom+10', },
-    { note: 'program',      base: 'global state',    x: 'right+10', y: 'top+0', },
-    { note: 'p-buffer',     base: 'canvas',          x: 'left-100', y: 'bottom+10', },
-    { note: 'n-buffer',     base: 'positionBuffer ', x: 'left-0',   y: 'bottom+10', },
-    { note: 't-buffer',     base: 'normalBuffer ',   x: 'left-0',   y: 'bottom+10', },
-    { note: 'i-buffer',     base: 'texcoordBuffer ', x: 'left-0',   y: 'bottom+10', },
-    { note: 'texture ',     base: 'indexBuffer ',    x: 'left-100', y: 'bottom+10', },
-  ];
-  let draggableCount = 0;
+  function getWindowElem(name) {
+    const nameElem = [...diagramElem.querySelectorAll('.name')].find(elem => elem.textContent.indexOf(name) >= 0);
+    if (nameElem) {
+      let elem = nameElem;
+      while (!elem.classList.contains('draggable')) {
+        elem = elem.parentElement;
+      }
+      return elem;
+    }
+    return name === '#diagram' ? diagramElem : null;
+  }
 
-  function makeDraggable(elem, x = 0, y = 0) {
-console.log(count++, elem.querySelector('.name').textContent);
+  function makeDraggable(elem) {
     const div = addElem('div', elem.parentElement, {
       className: 'draggable',
     });
     elem.parentElement.removeChild(elem);
     div.appendChild(elem);
-    setRelativePosition(div, diagramElem, x, y);
+    const pos = getNextWindowPosition(div);
+    div.style.left = px(pos.x);
+    div.style.top = px(pos.y);
     div.addEventListener('mousedown', dragStart, {passive: false});
   }
 
@@ -742,6 +780,23 @@ console.log(count++, elem.querySelector('.name').textContent);
         className: 'used-when-enabled',
         dataset: {
           help: helpToMarkdown(`
+          Used with the [ANGLE_instanced_arrays extension](https://www.khronos.org/registry/webgl/extensions/ANGLE_instanced_arrays/).
+          If --divisor-- === 0 then this attribute advances normally, once each vertex shader iteration.
+          If --divisor-- > 0 then this attribute advances once each --divisor-- instances.
+          
+          ---js
+          const ext = gl.getExtension('ANGLE_instanced_arrays');
+          const index = gl.getAttribLocation(program, 'someAttrib'); // ${i}
+          ext.vertexAttribDivisor(index, divisor);
+          ---
+
+          ${vaoNote}`),
+        },
+      });
+      addElem('td', tr, {
+        className: 'used-when-enabled',
+        dataset: {
+          help: helpToMarkdown(`
           The buffer this attribute will pull data from. This gets set
           implicitly when calling --gl.vertexAttribPointer-- from the
           currently bound --ARRAY_BUFFER--
@@ -759,23 +814,6 @@ console.log(count++, elem.querySelector('.name').textContent);
           ${vaoNote}`),
         },
       });
-      addElem('td', tr, {
-        className: 'used-when-enabled',
-        dataset: {
-          help: helpToMarkdown(`
-          Used with the [ANGLE_instanced_arrays extension](https://www.khronos.org/registry/webgl/extensions/ANGLE_instanced_arrays/).
-          If --divisor-- === 0 then this attribute advances normally, once each vertex shader iteration.
-          If --divisor-- > 0 then this attribute advances once each --divisor-- instances.
-          
-          ---js
-          const ext = gl.getExtension('ANGLE_instanced_arrays');
-          const index = gl.getAttribLocation(program, 'someAttrib'); // ${i}
-          ext.vertexAttribDivisor(index, divisor);
-          ---
-
-          ${vaoNote}`),
-        },
-      });
     }
 
     const formatters = [
@@ -786,8 +824,8 @@ console.log(count++, elem.querySelector('.name').textContent);
       formatBoolean,      // normalize
       formatUniformValue, // stride
       formatUniformValue, // offset
-      formatWebGLObject,  // buffer
       formatUniformValue, // divisor
+      formatWebGLObject,  // buffer
     ];
     const arrows = [];
 
@@ -802,8 +840,8 @@ console.log(count++, elem.querySelector('.name').textContent);
           gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_NORMALIZED),
           gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_STRIDE),
           gl.getVertexAttribOffset(i, gl.VERTEX_ATTRIB_ARRAY_POINTER),
-          gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING),
           gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_DIVISOR),
+          gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING),
         ];
         if (data[0]) {
           row.classList.add('attrib-enable');
@@ -814,7 +852,7 @@ console.log(count++, elem.querySelector('.name').textContent);
           const cell = row.cells[cellNdx];
           const newValue = formatters[cellNdx](value);
           if (updateElem(cell, newValue)) {
-            if (cellNdx === 7) {  // FIXME
+            if (cellNdx === 8) {  // FIXME
               const oldArrow = arrows[i];
               if (oldArrow) {
                 arrowManager.remove(oldArrow);
@@ -1033,7 +1071,6 @@ console.log(count++, elem.querySelector('.name').textContent);
   const defaultVAOInfo = {
     ui: createVertexArrayDisplay(diagramElem, '*default*', null),
   };
-  setRelativePosition(defaultVAOInfo.ui.elem, diagramElem, 10, -10);
 
   const settersToWrap = {};
 
@@ -1076,8 +1113,9 @@ console.log(count++, elem.querySelector('.name').textContent);
   expand(globalUI.clearState.elem);
   expand(globalUI.depthState.elem);
 
-  makeDraggable(globalStateElem, 10, 10);
-  makeDraggable(document.querySelector('#canvas'), -10, 10);
+  makeDraggable(globalStateElem);
+  makeDraggable(document.querySelector('#canvas'));
+  arrowManager.update();
 
   function wrapFn(fnName, fn) {
     gl[fnName] = function(origFn) {
@@ -1234,6 +1272,14 @@ console.log(count++, elem.querySelector('.name').textContent);
     ui.updateAttributes();
   });
 
-  stepper.init(codeElem, document.querySelector('#js').text);
+  function handleResizes() {
+    arrowManager.update();
+  }
+
+  stepper.init(codeElem, document.querySelector('#js').text, {
+    onAfter: handleResizes,
+  });
+
+  window.addEventListener('resize', handleResizes);
 }
 main();
