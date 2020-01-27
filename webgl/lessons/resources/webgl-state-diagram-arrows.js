@@ -79,13 +79,34 @@ function addGroup(parent, transform) {
 }
 */
 
-function addArrow(parent, color, arrowheadId) {
-  const group = addSVG('g', parent, {
+function addArrow(parent, color, arrowheadId, markerSide) {
+  const marker = parent.querySelector(`#${arrowheadId}`);
+  if (!marker) {
+    const defs = parent.querySelector('defs');
+    const marker = addSVG('marker', defs, {
+      id: arrowheadId,
+      viewBox: '0 0 10 10',
+      refX: 6,
+      refY: 5,
+      markerWidth: 6,
+      markerHeight: 6,
+      orient: 'auto',
+      fill: color,
+    });
+    addSVG('circle', marker, {
+      cx: 5,
+      cy: 5,
+      r: 5,
+    });
+  }
+
+  const attrs = {
     fill: 'none',
     stroke: color,
     'stroke-width': '2',
-    ...arrowheadId && {'marker-end': `url(#${arrowheadId})`},
-  });
+  };
+  attrs[markerSide] = `url(#${arrowheadId})`;
+  const group = addSVG('g', parent, attrs);
 
   return {
     group,
@@ -186,7 +207,8 @@ export default class ArrowManager {
     return id;
   }
   add(divA, divB, color = 'red') {
-    const arrow = addArrow(this.svg, color, this._getArrowhead(color));
+    const arrowheadId = this._getArrowhead(color);
+    const arrow = addArrow(this.svg, color, arrowheadId, 'marker-end');
     let win = divA;
     while (!win.classList.contains('window-content')) {
       win = win.parentElement;
@@ -197,7 +219,7 @@ export default class ArrowManager {
       addSVG('defs', startSegmentSVG);
     }
 
-    const startSegment = addArrow(startSegmentSVG, color);
+    const startSegment = addArrow(startSegmentSVG, color, `${arrowheadId}-s`, 'marker-start');
     const info = {
       arrow,
       startSegment,

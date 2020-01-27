@@ -6,14 +6,12 @@
 //'use strict';
 
 // TODO:
-// * with CSS put connector dots on WebGLObjects and object refs
-// * highlight active texture unit
+// * connect uniform sampler to texture unit
 // * texture mips
 // * breakpoints
 // * step to
 // * add help for each line
 // * continue flashing
-// * connect uniform sampler to texture unit
 
 import * as twgl from '/3rdparty/twgl-full.module.js';
 import {
@@ -103,6 +101,20 @@ function main() {
     e.target.parentElement.classList.toggle('open');
   }
 
+  function moveToFront(elemToFront) {
+    const elements = [];
+    document.querySelectorAll('.draggable').forEach(elem => {
+      if (elem !== elemToFront) {
+        elements.push(elem);
+      }
+    });
+    elements.sort((a, b) => a.style.zIndex > b.style.zIndex);
+    elements.push(elemToFront);
+    elements.forEach((elem, ndx) => {
+      elem.style.zIndex = ndx + 1;
+    });
+  }
+
   function dragStart(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -116,17 +128,7 @@ function main() {
     window.addEventListener('mousemove', dragMove, {passive: false});
     window.addEventListener('mouseup', dragStop, {passive: false});
 
-    const elements = [];
-    document.querySelectorAll('.draggable').forEach(elem => {
-      if (elem !== this) {
-        elements.push(elem);
-      }
-    });
-    elements.sort((a, b) => a.style.zIndex > b.style.zIndex);
-    elements.push(this);
-    elements.forEach((elem, ndx) => {
-      elem.style.zIndex = ndx + 1;
-    });
+    moveToFront(this);
   }
 
   function dragMove(e) {
@@ -996,7 +998,11 @@ function main() {
     };
 
     const stateTable = createStateTable(textureState, texElem, 'texture state', queryFn, false);
+
+    expand(mipsExpander);
+    expand(stateTable);
     makeDraggable(texElem);
+
     return {
       elem: texElem,
       updateData,
@@ -1010,6 +1016,7 @@ function main() {
     const expander = createExpander(parent, 'Texture Units');
     const tbody = createTable(expander, ['2D', 'CUBE_MAP']);
     const arrows = [];
+    let activeTextureUnit = 0;
  
     for (let i = 0; i < maxUnits; ++i) {
       arrows.push({});
@@ -1068,9 +1075,17 @@ function main() {
       });
     };
 
+    const updateActiveTextureUnit = () => {
+      tbody.rows[activeTextureUnit].classList.remove('active-texture-unit');
+      activeTextureUnit = gl.getParameter(gl.ACTIVE_TEXTURE) - gl.TEXTURE0;
+      tbody.rows[activeTextureUnit].classList.add('active-texture-unit');
+    };
+    updateActiveTextureUnit();
+
     return {
       elem: expander,
       updateCurrentTextureUnit,
+      updateActiveTextureUnit,
     };
   }
 
@@ -1138,6 +1153,7 @@ function main() {
 
   makeDraggable(globalStateElem);
   makeDraggable(document.querySelector('#canvas'));
+  moveToFront(defaultVAOInfo.ui.elem.parentElement);
   arrowManager.update();
 
   function wrapFn(fnName, fn) {
@@ -1293,6 +1309,10 @@ function main() {
     origFn.call(this, ...args);
     const {ui} = getCurrentVAOInfo();
     ui.updateAttributes();
+  });
+  wrapFn('activeTexture', function(origFn, unit) {
+    origFn.call(this, unit);
+    globalUI.textureUnits.updateActiveTextureUnit();
   });
 
   function handleResizes() {

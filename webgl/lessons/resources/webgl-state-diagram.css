@@ -1,6 +1,6 @@
 body {
   margin: 0;
-  font-size: x-small;
+  gfont-size: x-small;
   background-color: #333;
   color: white;
 }
@@ -33,6 +33,7 @@ canvas {
   left: 0;
   top: 0;
   z-index: 1;
+  pointer-events: none;
 }
 #arrows {
   position: absolute;
@@ -111,7 +112,9 @@ body {
 .program { background: hsla(30, 100%, 30%, 0.9); }
 .program-attributes { background: hsla(30, 100%, 20%, 0.9); }
 .program-uniforms { background: hsla(30, 100%, 20%, 0.9); }
-
+.active-texture-unit {
+  background: hsl(0, 50%, 50%);
+}
 .program-attributes, .program-uniforms {
   margin-top: 10px;
   border: 1px solid black;
