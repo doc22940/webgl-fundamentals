@@ -64,6 +64,39 @@ export default class Stepper {
       }
     }
   }
+  // WebGLObjects don't have names and there really isn't a good way
+  // to give them a name. This hack assumes the line calling `gl.createXXX`
+  // is in the form of `someVar = gl.createXXX` in which case it will
+  // name the object `someVar`.
+  //
+  // Of course it won't handle
+  //
+  //     const foo = {
+  //       tex: gl.createTexture();
+  //     };
+  //
+  // In which case we'd probably want to name it 'foo' or 'foo.tex'.
+  //
+  // It also won't work with
+  //
+  //     function makeTex() {
+  //       const t = gl.createTexture();
+  //       return t;
+  //     }
+  //
+  //     const checker = makeTex();
+  //
+  // In which case we'd arguably want it to be 'checker' but
+  // it would be 't' with the current code.
+  //
+  // There is really no way to fix this except to ask the user
+  // to give the object a name via some API but that would make the
+  // example non-standard.
+  //
+  // This is also why there is no helper for compiling shaders in
+  // the example code though for our example we could hack this
+  // to look for `someShader = compileShaderHelper(...)`
+  //
   guessIdentifierOfCurrentLine() {
     const m = this.nameRE.exec(this.currentLine.trim());
     return m ? m[1] : `-unknown${++this.unknownId}-`;
