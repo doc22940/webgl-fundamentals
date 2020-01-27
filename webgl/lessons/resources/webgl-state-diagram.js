@@ -7,6 +7,11 @@
 
 // TODO:
 // * connect arrows
+// * transparent
+// * put arrows in back
+// * with CSS put connector dots on WebGLObjects and object refs
+// * move buffers to right on vertex array
+// * highlight active texture unit
 // * position things
 // * texture mips
 // * breakpoints
@@ -14,6 +19,8 @@
 // * restart
 // * add help for each line
 // * continue flashing
+// * color arrows based on type?
+// * connect uniform sampler to texture unit
 
 import * as twgl from '/3rdparty/twgl-full.module.js';
 import {
@@ -38,6 +45,7 @@ import {
   formatWebGLObject,
   addWebGLObjectInfo,
   getWebGLObjectInfo,
+  formatWebGLObjectOrDefaultVAO,
 } from './webgl-state-diagram-context-wrapper.js';
 import Stepper from './webgl-state-diagram-stepper.js';
 import ArrowManager from './webgl-state-diagram-arrows.js';
@@ -154,7 +162,24 @@ function main() {
     elem.style.top  = px(y >= 0 ? y : baseRect.bottom + y - elemRect.height | 0);
   }
 
+
+  const windowPositions = [
+    { note: 'vertex-array', base: '#diagram',        x: 'left+10',  y: 'bottom-10', },
+    { note: 'global-state', base: '#diagram',        x: 'left+10',  y: 'top+10', },
+    { note: 'canvas',       base: '#diagram',        x: 'right-10', y: 'top+10', },
+    { note: 'v-shader',     base: 'canvas',          x: 'left-50',  y: 'bottom+10', },
+    { note: 'f-shader',     base: 'vertexShader ',   x: 'left+0',   y: 'bottom+10', },
+    { note: 'program',      base: 'global state',    x: 'right+10', y: 'top+0', },
+    { note: 'p-buffer',     base: 'canvas',          x: 'left-100', y: 'bottom+10', },
+    { note: 'n-buffer',     base: 'positionBuffer ', x: 'left-0',   y: 'bottom+10', },
+    { note: 't-buffer',     base: 'normalBuffer ',   x: 'left-0',   y: 'bottom+10', },
+    { note: 'i-buffer',     base: 'texcoordBuffer ', x: 'left-0',   y: 'bottom+10', },
+    { note: 'texture ',     base: 'indexBuffer ',    x: 'left-100', y: 'bottom+10', },
+  ];
+  let draggableCount = 0;
+
   function makeDraggable(elem, x = 0, y = 0) {
+console.log(count++, elem.querySelector('.name').textContent);
     const div = addElem('div', elem.parentElement, {
       className: 'draggable',
     });
@@ -174,6 +199,7 @@ function main() {
     return outer;
   }
 
+  const elemToArrowMap = new Map();
   function createStateTable(states, parent, title, queryFn, update = true) {
     const expander = createExpander(parent, title);
     const table = addElem('table', expander);
@@ -199,8 +225,28 @@ function main() {
       const raw = queryFn(state);
       const value = formatter(raw);
       const row = tbody.rows[rowNdx];
-      const isNew = row.cells[1].textContent !== value;
-      row.cells[1].textContent = value;
+      const cell = row.cells[1];
+      const isNew = cell.textContent !== value;
+      cell.textContent = value;
+      // FIX: should put this data else were instead of guessing
+      if (isNew) {
+        if (formatter === formatWebGLObject || formatter === formatWebGLObjectOrDefaultVAO) {
+          const oldArrow = elemToArrowMap.get(cell);
+          if (oldArrow) {
+            arrowManager.remove(oldArrow);
+            elemToArrowMap.delete(cell);
+          }
+          const targetInfo = raw
+              ? getWebGLObjectInfo(raw)
+              : (formatter === formatWebGLObjectOrDefaultVAO)
+                  ? defaultVAOInfo
+                  : null;
+          if (targetInfo && !targetInfo.deleted) {
+            elemToArrowMap.set(cell, arrowManager.add(cell, targetInfo.ui.elem.querySelector('.name')));
+          }
+        }
+      }
+
       if (!initial && isNew) {
         flash(row);
       }

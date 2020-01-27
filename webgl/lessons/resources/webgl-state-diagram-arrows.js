@@ -102,7 +102,7 @@ const p = ({x, y}) => `${x},${y}`;
 
 const arrowCPOff = 50;
 const arrowStartOff = 1;
-const arrowEndOff = 12;
+const arrowEndOff = 15;
 
 function updateArrow(arrowPath, divA, divB) {
   const a = getPageRelativeRect(divA);

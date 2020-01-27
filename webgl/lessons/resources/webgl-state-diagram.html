@@ -248,6 +248,12 @@ if (!gl.getProgramParameter(prg, gl.LINK_STATUS)) {
   throw new Error(gl.getProgramParameter(prg))
 };
 
+// NOTE! These are here to unclutter the diagram.
+// It is safe to delete shaders once a program is linked
+// though it is arguably not common
+gl.deleteShader(vertexShader);
+gl.deleteShader(fragmentShader);
+
 const positionLoc = gl.getAttribLocation(prg, 'position');
 const normalLoc = gl.getAttribLocation(prg, 'normal');
 const texcoordLoc = gl.getAttribLocation(prg, 'texcoord');

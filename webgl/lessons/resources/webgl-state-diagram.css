@@ -1,5 +1,6 @@
 body {
   margin: 0;
+  font-size: x-small;
 }
 canvas {
   display: block;
@@ -26,7 +27,7 @@ canvas {
   position: absolute;
   left: 0;
   top: 0;
-  z-index: 999;
+  z-index: -10;
   pointer-events: none;
 }
 #hint {
@@ -79,15 +80,15 @@ body {
   display: inline-block;
   padding: 10px;
 }
-#canvas { background: hsl(190, 100%, 80%); }
-#global-state { background: hsl(0, 100%, 85%); }
-.texture { background: hsl(200, 100%, 85%); }
-.buffer { background: hsl(130, 100%, 85%); }
-.vertex-array { background: hsl(260, 100%, 85%); }
-.shader { background: hsl(60, 100%, 85%); }
-.program { background: hsl(30, 100%, 70%); }
-.program-attributes { background: hsl(30, 100%, 80%); }
-.program-uniforms { background: hsl(30, 100%, 80%); }
+#canvas { background: hsla(190, 100%, 80%, 0.9); }
+#global-state { background: hsla(0, 100%, 85%, 0.9); }
+.texture { background: hsla(200, 100%, 85%, 0.9); }
+.buffer { background: hsla(130, 100%, 85%, 0.9); }
+.vertex-array { background: hsla(260, 100%, 85%, 0.9); }
+.shader { background: hsla(60, 100%, 85%, 0.9); }
+.program { background: hsla(30, 100%, 70%, 0.9); }
+.program-attributes { background: hsla(30, 100%, 80%, 0.9); }
+.program-uniforms { background: hsla(30, 100%, 80%, 0.9); }
 .program-attributes, .program-uniforms {
   margin-top: 10px;
   border: 1px solid black;
@@ -228,6 +229,7 @@ th {
   max-height: 100vh;
   display: flex;
   flex-direction: column;
+  z-index: 990;
 }
 #ui {
   font-size: xx-large;
@@ -273,4 +275,9 @@ th {
 .current-line,
 .current-line .hljs {
   background: hsl(0, 100%, 10%);
+}
+
+@media (max-width: 1200px) {
+  body {
+  }
 }
