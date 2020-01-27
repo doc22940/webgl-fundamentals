@@ -1,6 +1,8 @@
 /* eslint strict: "off" */
 /* eslint no-undef: "error" */
 
+import {addSVG} from './webgl-state-diagram-utils.js';
+
 function getPageRelativeRect(elem) {
   const rect = elem.getBoundingClientRect();
   const left = rect.left + window.scrollX | 0;
@@ -27,14 +29,6 @@ function getElemRelativePosition(elem, x, y) {
 }
 */
 
-function addSVG(tag, parent, attrs = {}) {
-  const elem = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for (const [key, value] of Object.entries(attrs)) {
-    elem.setAttribute(key, value);
-  }
-  parent.appendChild(elem);
-  return elem;
-}
 
 /*
 const svg = addSVG('svg', document.body, {
@@ -85,13 +79,14 @@ function addGroup(parent, transform) {
 }
 */
 
-function addArrow(parent) {
+function addArrow(parent, color, arrowheadId) {
   const group = addSVG('g', parent, {
     fill: 'none',
-    stroke: 'red',
+    stroke: color,
     'stroke-width': '2',
-    'marker-end': 'url(#arrowhead)',
+    ...arrowheadId && {'marker-end': `url(#${arrowheadId})`},
   });
+
   return {
     group,
     path: addSVG('path', group),
@@ -104,43 +99,113 @@ const arrowCPOff = 100;
 const arrowStartOff = 1;
 const arrowEndOff = 15;
 
-function updateArrow(arrowPath, divA, divB) {
+function updateArrow(arrowPath, startSegmentPath, divA, divB) {
   const a = getPageRelativeRect(divA);
   const b = getPageRelativeRect(divB);
+  let aContainer = divA;
+  while (!aContainer.classList.contains('window-content')) {
+    aContainer = aContainer.parentElement;
+  }
+  const c = getPageRelativeRect(aContainer);
+
+  // +--------+
+  // |+---+   |
+  // ||   A   C  cCP
+  // |+---+   |         +----+
+  // +--------+     bCP B    |
+  //                    |    |
+  //                    +----+
+
   const posA = {
-    x: a.right + arrowStartOff,
+    x: a.right,
     y: a.top + a.height / 2,
-  };
-  const posACP = {
-    x: posA.x + arrowCPOff,
-    y: posA.y,
   };
   const posB = {
     x: b.left - arrowEndOff,
     y: b.top  + b.height / 2,
   };
+  const posC = {
+    x: c.right + arrowStartOff,
+    y: posA.y,
+  };
+  const posCCP = {
+    x: posC.x + arrowCPOff,
+    y: posC.y,
+  };
   const posBCP = {
     x: posB.x - arrowCPOff,
     y: posB.y,
   };
-  const path = `M${p(posA)} C${p(posACP)} ${p(posBCP)} ${p(posB)}`;
-  arrowPath.setAttribute("d", path);
+  const posARel = {
+    x: posA.x - c.left,
+    y: posA.y - c.top,
+  };
+  const posCRel = {
+    x: posC.x - c.left,
+    y: posC.y - c.top,
+  };
+  startSegmentPath.setAttribute("d", `M${p(posARel)} L${p(posCRel)}`);
+  arrowPath.setAttribute("d", `M${p(posC)} C${p(posCCP)} ${p(posBCP)} ${p(posB)}`);
 }
+
+/*
+
+        <marker id="arrowhead" viewBox="0 0 10 10" refX="3" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto" fill="red">
+          <path d="M 0 0 L 10 5 L 0 10 z" />
+        </marker>
+*/
 
 export default class ArrowManager {
   constructor(svg) {
     this.svg = svg;
     this.arrows = [];
+    this.arrowHeadIdsByColor = {};
   }
-  add(divA, divB) {
-    const arrow = addArrow(this.svg);
+  _getArrowhead(color) {
+    const arrowId = this.arrowHeadIdsByColor[color];
+    if (arrowId) {
+      return arrowId;
+    }
+    const defs = this.svg.querySelector('defs');
+    const id = color.replace(/[^a-z0-9]/g, '-');
+    const marker = addSVG('marker', defs, {
+      id,
+      viewBox: '0 0 10 10',
+      refX: 3,
+      refY: 5,
+      markerWidth: 6,
+      markerHeight: 6,
+      orient: 'auto',
+      fill: color,
+    });
+    addSVG('path', marker, {
+      d: 'M 0 0 L 10 5 L 0 10 z',
+    });
+    this.arrowHeadIdsByColor[color] = id;
+    return id;
+  }
+  add(divA, divB, color = 'red') {
+    const arrow = addArrow(this.svg, color, this._getArrowhead(color));
+    let win = divA;
+    while (!win.classList.contains('window-content')) {
+      win = win.parentElement;
+    }
+    let startSegmentSVG = win.querySelector('.draggable-svg');
+    if (!startSegmentSVG) {
+      startSegmentSVG = addSVG('svg', win, {'class': 'draggable-svg'});
+      addSVG('defs', startSegmentSVG);
+    }
+
+    const startSegment = addArrow(startSegmentSVG, color);
     const info = {
       arrow,
+      startSegment,
       divA,
       divB,
     };
     this.arrows.push(info);
-    updateArrow(arrow.path, divA, divB);
+    updateArrow(arrow.path, startSegment.path, divA, divB);
     return info;
   }
   remove(info) {
@@ -149,11 +214,17 @@ export default class ArrowManager {
       this.arrows.splice(ndx, 1);
       const group = info.arrow.group;
       group.parentElement.removeChild(group);
+      const segGroup = info.startSegment.group;
+      segGroup.parentElement.removeChild(segGroup);
     }
   }
   update() {
+    const remove = this.arrows.filter(info => !document.body.contains(info.divB));
+    for (const r of remove) {
+      this.remove(r);
+    }
     for (const info of this.arrows) {
-      updateArrow(info.arrow.path, info.divA, info.divB);
+      updateArrow(info.arrow.path, info.startSegment.path, info.divA, info.divB);
     }
   }
 }

@@ -69,6 +69,15 @@ function addElem(tag, parent, attrs = {}) {
   return elem;
 }
 
+function addSVG(tag, parent, attrs = {}) {
+  const elem = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    elem.setAttribute(key, value);
+  }
+  parent.appendChild(elem);
+  return elem;
+}
+
 function createTable(parent, headings) {
   const table = addElem('table', parent);
   const thead = addElem('thead', table);
@@ -123,5 +132,6 @@ export {
   updateElem,
   helpToMarkdown,
   addElem,
+  addSVG,
   createTable,
 };

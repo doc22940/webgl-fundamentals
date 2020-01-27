@@ -15,16 +15,12 @@
       <div class="name">canvas</div>
       <canvas></canvas>
     </div>
-    <div id="global-state">
+    <div id="global-state" class="window-content">
       <div class="name">global state</div>
     </div>
 
     <svg id="arrows" width="100%" height="100%">
       <defs>
-        <marker id="arrowhead" viewBox="0 0 10 10" refX="3" refY="5"
-            markerWidth="6" markerHeight="6" orient="auto" fill="red">
-          <path d="M 0 0 L 10 5 L 0 10 z" />
-        </marker>
       </defs>
     </svg>
   </div>
@@ -39,7 +35,7 @@
 <div id="hint"></div>
 
 <template id="buffer-template">
-<div class="webgl-object buffer" data-help="
+<div class="webgl-object window-content buffer" data-help="
 Buffers are created with
 
 ```js
@@ -53,7 +49,7 @@ const buffer = gl.createBuffers();
 </template>
 
 <template id="texture-template">
-<div class="webgl-object texture" data-help="
+<div class="webgl-object window-content texture" data-help="
 Textures are created with
 
 ```js
@@ -90,7 +86,7 @@ texture = textureUnits[activeTexture][bindPoint]
 </template>
 
 <template id="vertex-array-template">
-  <div class="webgl-object vertex-array" data-help="
+  <div class="webgl-object window-content vertex-array" data-help="
 Normally there is only the 1 default vertex array in WebGL 1.0.
 
 You can create more vertex arrays with the
@@ -117,7 +113,7 @@ Passing `null` to `gl.bindVertexArrayOES` binds the default vertex array.
 </template>
 
 <template id="vertex-shader-template">
-  <div class="webgl-object shader vertex-shader" data-help="
+  <div class="webgl-object window-content shader vertex-shader" data-help="
 A vertex shader's sole responsibility is to set `gl_Position`
 to a clip space position. To create one use:
 
@@ -135,7 +131,7 @@ if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === 0) {
 </template>
 
 <template id="fragment-shader-template">
-  <div class="webgl-object shader fragment-shader" data-help="
+  <div class="webgl-object window-content shader fragment-shader" data-help="
 A fragment shader's sole responsibility is to set `gl_FragColor`
 to a color. To create one use:
 
@@ -153,7 +149,7 @@ if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === 0) {
 </template>
 
 <template id="program-template">
-  <div class="webgl-object program" data-help="
+  <div class="webgl-object window-content program" data-help="
 A program is a combination of a vertex shader
 and a fragment shader *linked* together.
 
