@@ -7,6 +7,7 @@
 
 // TODO:
 // * connect uniform sampler to texture unit
+// * fix enabled/disable attribute colors
 // * texture mips
 // * breakpoints
 // * step to
@@ -799,7 +800,7 @@ function main() {
         className: 'used-when-enabled',
         dataset: {
           help: helpToMarkdown(`
-          Used with the [ANGLE_instanced_arrays extension](https://www.khronos.org/registry/webgl/extensions/ANGLE_instanced_arrays/).
+          Used with the [--ANGLE_instanced_arrays--](https://www.khronos.org/registry/webgl/extensions/ANGLE_instanced_arrays/)  extension.
           If --divisor-- === 0 then this attribute advances normally, once each vertex shader iteration.
           If --divisor-- > 0 then this attribute advances once each --divisor-- instances.
           
