@@ -37,6 +37,8 @@ export default class Stepper {
     stepElem.addEventListener('click', step);
     const runElem = document.querySelector('#run');
     runElem.addEventListener('click', run);
+    const restartElem = document.querySelector('#restart');
+    restartElem.addEventListener('click', restart);
 
     const execute = (code) => {
       this.currentLine = code;
@@ -48,6 +50,10 @@ export default class Stepper {
       execute(lines[currentLineNo++].code);
       highlightCurrentLine();
       onAfter();
+    }
+
+    function restart() {
+      window.location.reload();
     }
 
     function highlightCurrentLine() {

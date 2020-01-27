@@ -6,20 +6,13 @@
 //'use strict';
 
 // TODO:
-// * connect arrows
-// * transparent
-// * put arrows in back
 // * with CSS put connector dots on WebGLObjects and object refs
-// * move buffers to right on vertex array
 // * highlight active texture unit
-// * position things
 // * texture mips
 // * breakpoints
 // * step to
-// * restart
 // * add help for each line
 // * continue flashing
-// * color arrows based on type?
 // * connect uniform sampler to texture unit
 
 import * as twgl from '/3rdparty/twgl-full.module.js';
@@ -61,6 +54,7 @@ function main() {
   const codeElem = document.querySelector('#code');
   const stepper = new Stepper();
   const arrowManager = new ArrowManager(document.querySelector('#arrows'));
+  const webglObjectTypeToColorMap = new Map();
 
   const glEnumToString = twgl.glEnumToString;
   const formatEnum = v => glEnumToString(gl, v);
@@ -255,6 +249,21 @@ function main() {
     return expander;
   }
 
+  function querySelectorClassInclusive(elem, className) {
+    return elem.classList.contains(className)
+        ? elem
+        : elem.querySelector(`.${className}`);
+  }
+
+  const hsl = (h, s, l) => `hsl(${h * 360 | 0}, ${s * 100 | 0}%, ${l * 100 | 0}%)`;
+
+  function getColorForWebGLObject(webglObject, elem) {
+    const win = querySelectorClassInclusive(elem, 'window-content');
+    const style = getComputedStyle(win);
+    const c = chroma(style.backgroundColor).hsl();
+    return hsl(c[0] / 360, 1, 0.8);
+  }
+
   function updateStateTable(states, parent, queryFn, initial) {
     const tbody = parent.querySelector('tbody');
     // NOTE: Assumption that states array is parallel to table rows
@@ -279,8 +288,13 @@ function main() {
               : (formatter === formatWebGLObjectOrDefaultVAO)
                   ? defaultVAOInfo
                   : null;
-          if (targetInfo && !targetInfo.deleted) {
-            elemToArrowMap.set(cell, arrowManager.add(cell, targetInfo.ui.elem.querySelector('.name')));
+          if (targetInfo && !targetInfo.deleted) {            
+            elemToArrowMap.set(
+                cell,
+                arrowManager.add(
+                    cell,
+                    targetInfo.ui.elem.querySelector('.name'),
+                    getColorForWebGLObject(raw, targetInfo.ui.elem)));
           }
         }
       }
@@ -605,7 +619,10 @@ function main() {
         });
         const targetInfo = getWebGLObjectInfo(shader);
         if (!targetInfo.deleted) {
-          arrows.push(arrowManager.add(tr, targetInfo.ui.elem.querySelector('.name')));
+          arrows.push(arrowManager.add(
+              tr, 
+              targetInfo.ui.elem.querySelector('.name'),
+              getColorForWebGLObject(shader, targetInfo.ui.elem)));
         }
       }
 
@@ -861,7 +878,10 @@ function main() {
               if (value) {
                 const targetInfo = getWebGLObjectInfo(value);
                 if (!targetInfo.deleted) {
-                  arrows[i] = arrowManager.add(cell, targetInfo.ui.elem.querySelector('.name'));
+                  arrows[i] = arrowManager.add(
+                      cell,
+                      targetInfo.ui.elem.querySelector('.name'),
+                      getColorForWebGLObject(value, targetInfo.ui.elem));
                 }
               }
             }
@@ -1038,7 +1058,10 @@ function main() {
           if (texture) {
             const targetInfo = getWebGLObjectInfo(texture);
             if (!targetInfo.deleted) {
-              arrows[unit][target] = arrowManager.add(cell, targetInfo.ui.elem.querySelector('.name'));
+              arrows[unit][target] = arrowManager.add(
+                  cell,
+                  targetInfo.ui.elem.querySelector('.name'),
+                  getColorForWebGLObject(texture, targetInfo.ui.elem));
             }
           }
         }
